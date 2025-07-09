@@ -1,0 +1,95 @@
+html {
+  font-size: 14px;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+.btn:focus,
+.btn:active:focus,
+.btn-link.nav-link:focus,
+.form-control:focus,
+.form-check-input:focus {
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+}
+
+html {
+  position: relative;
+  min-height: 100%;
+}
+
+body {
+  margin-bottom: 60px;
+}
+
+/* -------------------------
+   Dark Mode Styles
+-------------------------- */
+
+body.dark-mode {
+  background-color: #121212;
+  color: #f0f0f0;
+}
+
+/* Navbar, Nav Container, Footer */
+body.dark-mode .navbar,
+body.dark-mode .nav-container,
+body.dark-mode .footer {
+  background-color: #2c2c2c !important; /* lighter grey for contrast */
+  color: #f0f0f0;
+}
+
+/* Navbar brand text */
+body.dark-mode .navbar .navbar-brand {
+  color: #ffffff;
+}
+
+/* Navbar links */
+body.dark-mode .navbar a,
+body.dark-mode .nav-container a,
+body.dark-mode .footer a {
+  color: #f0f0f0;
+}
+
+/* Chat container (main chat window) */
+body.dark-mode .chat-container {
+  background-color: #1c1c1c;
+  border: 1px solid #333;
+  color: #f0f0f0;
+}
+
+/* Chat heading (IPPT Fitness Chatbot) */
+body.dark-mode .chat-container h2,
+body.dark-mode .chat-container h3 {
+  color: #ffffff;
+}
+
+/* Chat box specifically */
+body.dark-mode .chat-box {
+  background-color: #2c2c2c; /* same as navbar for consistency */
+  color: #f0f0f0;
+}
+
+/* Links in dark mode */
+body.dark-mode a {
+  color: #80caff;
+}
+
+/* General buttons in dark mode */
+body.dark-mode button,
+body.dark-mode .btn {
+  background-color: #333;
+  color: #f0f0f0;
+  border-color: #555;
+}
+
+/* Keep Send button blue in dark mode */
+body.dark-mode .chat-container button,
+body.dark-mode .btn-primary {
+  background-color: #258cfb;
+  border-color: #258cfb;
+  color: #ffffff;
+}

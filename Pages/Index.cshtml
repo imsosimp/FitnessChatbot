@@ -1,0 +1,169 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "IPPT Fitness Chatbot";
+}
+
+<style>
+    body {
+        background-color: #f0f2f5;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .chat-container {
+        max-width: 850px;
+        @* margin: 60px auto; *@
+        background: #fff;
+        border-radius: 16px;
+        padding: 25px 30px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        transition: box-shadow 0.3s ease;
+    }
+
+    .chat-container:hover {
+        box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+    }
+
+    .chat-title {
+        text-align: center;
+        color: #333;
+        margin-bottom: 25px;
+        font-weight: 700;
+        font-size: 24px;
+    }
+
+    .chat-box {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        border: 1px solid #e0e0e0;
+        padding: 20px;
+        height: 400px;
+        overflow-y: auto;
+        background: #fafafa;
+        border-radius: 12px;
+        font-size: 18px;
+    }
+
+    .message {
+        display: flex;
+        animation: fadeIn 0.5s forwards;
+        opacity: 0;
+    }
+
+    .message.bot {
+        justify-content: flex-start;
+    }
+
+    .message.user {
+        justify-content: flex-end;
+    }
+
+    .bubble {
+        max-width: 75%;
+        padding: 12px 18px;
+        border-radius: 20px;
+        word-wrap: break-word;
+        line-height: 1.4;
+    }
+
+    .message.bot .bubble {
+        background-color: #f1f0f0;
+        color: #333;
+        border-top-left-radius: 0;
+    }
+
+    .message.user .bubble {
+        background-color: #007bff;
+        color: white;
+        border-top-right-radius: 0;
+    }
+
+    .chat-input-group {
+        margin-top: 25px;
+    }
+
+    .chat-input {
+        height: 52px;
+        font-size: 15px;
+        border-radius: 8px;
+    }
+
+    .chat-send-btn {
+        height: 52px;
+        font-size: 15px;
+        background-color: #007bff;
+        border-color: #007bff;
+        border-radius: 8px;
+        transition: background-color 0.2s ease;
+    }
+
+    .chat-send-btn:hover {
+        background-color: #0056b3;
+        border-color: #0056b3;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+
+<div class="container chat-container">
+    <h2 class="chat-title">IPPT Fitness Chatbot</h2>
+
+    <div id="chat-box" class="chat-box">
+        <div class="message bot">
+            <div class="bubble">Hi there! 👋 How can I help you today?</div>
+        </div>
+    </div>
+
+    <div class="input-group chat-input-group">
+        <input type="text" id="user-input" class="form-control chat-input" placeholder="Ask anything about IPPT...">
+        <button class="btn btn-primary chat-send-btn" onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Axios CDN import -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        document.getElementById("user-input").addEventListener("keydown", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault(); 
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            let input = document.getElementById("user-input").value.trim();
+            if (!input) return;
+
+            addMessage("You", input);
+
+            axios.post('/api/chat', { message: input }, { withCredentials: true })
+                .then(response => {
+                    addMessage("Bot", response.data.response);
+                    document.getElementById("user-input").value = "";
+                })
+                .catch(error => {
+                    console.error("Error sending message:", error);
+                    addMessage("Bot", "Sorry, something went wrong.");
+                });
+        }
+
+        function addMessage(sender, text) {
+            let chatBox = document.getElementById("chat-box");
+            const formattedText = text.replace(/\n/g, "<br>");
+            const isBot = sender.toLowerCase() === "bot";
+
+            const messageHtml = 
+                `<div class="message ${isBot ? 'bot' : 'user'}">
+                    <div class="bubble">${formattedText}</div>
+                </div>`;
+            chatBox.innerHTML += messageHtml;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+}
