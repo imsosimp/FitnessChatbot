@@ -43,6 +43,13 @@ public class ChatController : ControllerBase
 
         string message = request.Message.ToLower().Trim();
 
+        if (Regex.IsMatch(message, @"\bwhy\s+is\s+ippt\b") ||
+            Regex.IsMatch(message, @"\bwhat\s+is\s+ippt\b"))
+            {
+                var answer = _repo.GetAnswer("ippt", message.Contains("why") ? "why" : "what");
+                return Ok(new ChatResponse { Response = answer });
+            }
+
         var ipptFlow = HttpContext.Session.GetString(SessionIpptFlowKey);
         if (ipptFlow == "true")
         {
@@ -50,6 +57,20 @@ public class ChatController : ControllerBase
         }
     
         var intent = _nlu.Classify(message);
+
+        switch (intent.MiscIntent)
+        {
+            case "greeting":
+                return Ok(new ChatResponse { Response = "Hi there 👋 How can I help you today?" });
+
+            case "thanks":
+                return Ok(new ChatResponse { Response = "You’re welcome! Let me know if I can help with anything else." });
+
+            case "farewell":
+                ClearSession();
+                ClearIpptSession();
+                return Ok(new ChatResponse { Response = "Good‑bye 👋 Stay active and take care!", EndChat = true });
+        }
 
         if (intent.QuestionType == "ippt_check" || IsIPPTCheckRequest(message))
         {
@@ -93,6 +114,16 @@ public class ChatController : ControllerBase
         {
             HttpContext.Session.SetString(SessionLevelKey, intent.Level);
             prevLevel = intent.Level;
+        }
+
+        if (!string.IsNullOrEmpty(intent.QuestionType) && intent.QuestionType == "tips")
+        {
+            // Figure out which exercise/bodypart the user mentioned
+            var fieldToUse = normalizedField ?? _nlu.DetectField(message);
+
+            var tipsAnswer = _repo.GetAnswer(fieldToUse, "tips");
+            if (!string.IsNullOrEmpty(tipsAnswer))
+                return Ok(new ChatResponse { Response = tipsAnswer });
         }
 
         if (intent.Field == "tips" || prevField == "tips")
@@ -369,4 +400,5 @@ public class ChatRequest
 public class ChatResponse
 {
     public string? Response { get; set; }
+    public bool EndChat { get; set; }
 }

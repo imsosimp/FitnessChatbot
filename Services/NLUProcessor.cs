@@ -17,10 +17,7 @@ public class NLUProcessor
 
         // General
         {"body", "bodypart"}, {"muscle", "bodypart"}, {"muscles", "bodypart"},
-        {"train", "bodypart"}, {"target", "bodypart"},
-
-        // Tips
-        {"tip", "tips"}, {"tips", "tips"}, {"advice", "tips"},
+        {"train", "bodypart"}, {"target", "bodypart"},        
 
         // IPPT
         {"ippt", "ippt"}
@@ -40,7 +37,10 @@ public class NLUProcessor
         {"which", "which"},
         { "what is", "what"},
         {"importance", "why"},
-        {"important", "why"}
+        {"important", "why"},
+        // Tips
+        {"tip", "tips"}, {"tips", "tips"}, {"advice", "tips"},
+        
     };
 
     private readonly Dictionary<string, string> GenderKeywords = new()
@@ -49,6 +49,24 @@ public class NLUProcessor
         {"female", "female"}, {"f", "female"}
     };
 
+    private readonly Dictionary<string, string> MiscIntents = new()
+    {
+        {"hi", "greeting"}, {"hello", "greeting"}, {"hey", "greeting"},
+        {"thank you", "thanks"}, {"thanks", "thanks"}, {"thx", "thanks"},
+        {"appreciate", "thanks"}, {"ty", "thanks"},  {"tysm", "thanks"},
+        {"tyvm", "thanks"}, {"bye", "farewell"}, {"goodbye", "farewell"},
+        {"good‑bye", "farewell"}, {"see you", "farewell"}, {"exit", "farewell"}
+    };
+
+    public string? DetectMiscIntent(string message)
+    {
+        foreach (var pair in MiscIntents)
+        {
+            if (message.Contains(pair.Key))
+                return pair.Value;
+        }
+        return null;
+    }
 
     public string DetectIntent(string message)
     {
@@ -69,7 +87,7 @@ public class NLUProcessor
 
         // Unknown if nothing else matched
         return "UNKNOWN";
-        
+
     }
 
     public string DetectGender(string message)
@@ -93,13 +111,15 @@ public class NLUProcessor
         string level = DetectLevel(message);
         string questionType = DetectQuestionIntent(message);
         string gender = DetectGender(message);
+        string MiscIntent = DetectMiscIntent(message); 
 
         return new IntentResult
         {
-            Field = field,
-            Level = level,
-            QuestionType = questionType,
-            Gender = gender
+            Field = DetectField(message),
+            Level = DetectLevel(message),
+            QuestionType = DetectQuestionIntent(message),
+            Gender = DetectGender(message),
+            MiscIntent = DetectMiscIntent(message) 
         };
     }
 
@@ -203,4 +223,5 @@ public class IntentResult
     public string Level { get; set; }
     public string QuestionType { get; set; }
     public string Gender { get; set; }
+    public string MiscIntent { get; set; }
 }

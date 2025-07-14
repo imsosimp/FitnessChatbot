@@ -4,111 +4,6 @@
     ViewData["Title"] = "IPPT Fitness Chatbot";
 }
 
-<style>
-    body {
-        background-color: #f0f2f5;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-
-    .chat-container {
-        max-width: 850px;
-        @* margin: 60px auto; *@
-        background: #fff;
-        border-radius: 16px;
-        padding: 25px 30px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-        transition: box-shadow 0.3s ease;
-    }
-
-    .chat-container:hover {
-        box-shadow: 0 12px 30px rgba(0,0,0,0.2);
-    }
-
-    .chat-title {
-        text-align: center;
-        color: #333;
-        margin-bottom: 25px;
-        font-weight: 700;
-        font-size: 24px;
-    }
-
-    .chat-box {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        border: 1px solid #e0e0e0;
-        padding: 20px;
-        height: 400px;
-        overflow-y: auto;
-        background: #fafafa;
-        border-radius: 12px;
-        font-size: 18px;
-    }
-
-    .message {
-        display: flex;
-        animation: fadeIn 0.5s forwards;
-        opacity: 0;
-    }
-
-    .message.bot {
-        justify-content: flex-start;
-    }
-
-    .message.user {
-        justify-content: flex-end;
-    }
-
-    .bubble {
-        max-width: 75%;
-        padding: 12px 18px;
-        border-radius: 20px;
-        word-wrap: break-word;
-        line-height: 1.4;
-    }
-
-    .message.bot .bubble {
-        background-color: #f1f0f0;
-        color: #333;
-        border-top-left-radius: 0;
-    }
-
-    .message.user .bubble {
-        background-color: #007bff;
-        color: white;
-        border-top-right-radius: 0;
-    }
-
-    .chat-input-group {
-        margin-top: 25px;
-    }
-
-    .chat-input {
-        height: 52px;
-        font-size: 15px;
-        border-radius: 8px;
-    }
-
-    .chat-send-btn {
-        height: 52px;
-        font-size: 15px;
-        background-color: #007bff;
-        border-color: #007bff;
-        border-radius: 8px;
-        transition: background-color 0.2s ease;
-    }
-
-    .chat-send-btn:hover {
-        background-color: #0056b3;
-        border-color: #0056b3;
-    }
-
-    @@keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-</style>
-
 <div class="container chat-container">
     <h2 class="chat-title">IPPT Fitness Chatbot</h2>
 
@@ -123,12 +18,24 @@
         <button class="btn btn-primary chat-send-btn" onclick="sendMessage()">Send</button>
     </div>
 </div>
+<!-- Floating Robot FAQ widget -->
+<div id="faq-widget">
+    <button id="bot-toggle" aria-label="Open FAQs"></button>
+
+    <div id="faq-panel" class="hidden">
+        <div class="faq-item" data-question="what is ippt">What is IPPT?</div>
+        <div class="faq-item" data-question="why is ippt important">Why is IPPT important?</div>
+        <div class="faq-item" data-question="check ippt result">Check IPPT result</div>
+    </div>
+</div>
+
 
 @section Scripts {
-    <!-- Axios CDN import -->
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<!-- Axios CDN import -->
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
-    <script>
+<script>
+        //submit on Enter
         document.getElementById("user-input").addEventListener("keydown", function(event) {
             if (event.key === "Enter") {
                 event.preventDefault(); 
@@ -146,6 +53,10 @@
                 .then(response => {
                     addMessage("Bot", response.data.response);
                     document.getElementById("user-input").value = "";
+
+                    if (response.data.endChat) {
+                        document.querySelector(".chat-input-group").style.display = "none";
+                    }
                 })
                 .catch(error => {
                     console.error("Error sending message:", error);
@@ -155,6 +66,7 @@
 
         function addMessage(sender, text) {
             let chatBox = document.getElementById("chat-box");
+            @* const formattedText = text; *@
             const formattedText = text.replace(/\n/g, "<br>");
             const isBot = sender.toLowerCase() === "bot";
 
@@ -165,5 +77,30 @@
             chatBox.innerHTML += messageHtml;
             chatBox.scrollTop = chatBox.scrollHeight;
         }
+        
+        /* ---------- Floating FAQ widget ---------- */
+        const botBtn  = document.getElementById('bot-toggle');
+        const faqBox  = document.getElementById('faq-panel');
+        const faqItems= document.querySelectorAll('.faq-item');
+
+        // toggle show / hide
+        botBtn.addEventListener('click', () => faqBox.classList.toggle('show'));
+
+        // click each FAQ bubble
+        faqItems.forEach(item=>{
+            item.addEventListener('click', e=>{
+                const q = e.currentTarget.dataset.question;
+                // close panel for cleanliness
+                faqBox.classList.remove('show');
+                // place text in input and reuse existing flow
+                addMessage('You', q);
+                axios.post('/api/chat',{message:q},{withCredentials:true})
+                    .then(r=> addMessage('Bot', r.data.response))
+                    .catch(err=>{
+                        console.error(err);
+                        addMessage('Bot','Sorry, something went wrong.');
+                    });
+            });
+        });
     </script>
 }

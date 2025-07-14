@@ -11,18 +11,18 @@ public class AnswerRepository
         { ("ippt", "why"), "IPPT ensures servicemen maintain baseline fitness, which is essential for operational readiness, emergency response, and endurance during demanding duties. It also promotes discipline, resilience, and healthy living." },
 
         // PUSH-UP (shared by chest & triceps)
-        { ("push-up", "beginner"), @"Push-Up Training Program – Beginner (0-20 reps) 1. Wall Push-Ups: 3x10-12. 2. Incline Push-Ups: 3x8-10. 3. Negative Push-Ups: 2-3x5 (slow descent). 4. Knee Push-Ups: 3x6-8. 3-4 times/week. Progress by increasing reps or moving to harder variations." },
-        { ("push-up", "amateur"), @"Push-Up Training Program – Amateur (20-40 reps) 1. Standard Push-Ups: 3-4 sets of max reps (stop 1-2 reps before failure). 2. Wide Push-Ups (chest): 3x10-12. 3. Diamond Push-Ups (triceps): 3x8-10. Progress every 1-2 weeks." },
-        { ("push-up", "advanced"), @"Push-Up Training Program – Advanced (40+ reps) 1. Incline Clapping Push-Ups: 2-3x5-8. 2. Archer or One-Arm Push-Ups for challenge. 3-5 times/week focusing on form and control." },
+        { ("push-up", "beginner"), @"Push-Up Training Program – Beginner (0-20 reps) 1. Wall Push-Ups: 3x10-12. 2. Incline Push-Ups: 3x8-10. 3. Negative Push-Ups: 2-3x5 (slow descent). 4. Knee Push-Ups: 3x6-8. 3-4 times/week."+"\n\nProgress by increasing reps or moving to harder variations." },
+        { ("push-up", "amateur"), @"Push-Up Training Program – Amateur (20-40 reps) 1. Standard Push-Ups: 3-4 sets of max reps (stop 1-2 reps before failure). 2. Wide Push-Ups (chest): 3x10-12. 3. Diamond Push-Ups (triceps): 3x8-10."+"\n\nProgress every 1-2 weeks." },
+        { ("push-up", "advanced"), @"Push-Up Training Program – Advanced (40+ reps) 1. Incline Clapping Push-Ups: 2-3x5-8. 2. Archer or One-Arm Push-Ups for challenge."+"\n\n3-5 times/week focusing on form and control." },
 
         // SIT-UP (shared by abs)
-        { ("sit-up", "beginner"), @"Sit-Up Training Program – Beginner (0-15 reps) 1. Assisted Sit-Ups: 3x8-10. 2. Crunches: 3x12-15. 3. Negative Sit-Ups: 2-3x6-8 (slow descent). 4. Plank Holds: 2-3x20-30s. 3-4 times/week. Build core strength before progressing." },
-        { ("sit-up", "amateur"), @"Sit-Up Training Program – Amateur (15-30 reps) 1. Standard Sit-Ups: 3x10-15. 2. Weighted Sit-Ups (use backpack): 3x8-12. 3. Bicycle Crunches: 3x12-15/side. 4. Hanging Knee Tucks: 3x8-10. 3-5 times/week." },
-        { ("sit-up", "advanced"), @"Sit-Up Training Program – Advanced (30+ reps) 1. Weighted Sit-Ups: 4x12-15. 2. Decline Sit-Ups: 3-4x8-12. 3. Hanging Leg Raises: 3-4x8-12. 4. V-Ups: 3x10-15. 5. Resistance Band Sit-Ups: 3x12-15. 3-5 times/week to sustain performance." },
+        { ("sit-up", "beginner"), @"Sit-Up Training Program – Beginner (0-15 reps) 1. Assisted Sit-Ups: 3x8-10. 2. Crunches: 3x12-15. 3. Negative Sit-Ups: 2-3x6-8 (slow descent). 4. Plank Holds: 2-3x20-30s. 3-4 times/week."+"\n\nBuild core strength before progressing." },
+        { ("sit-up", "amateur"), @"Sit-Up Training Program – Amateur (15-30 reps) 1. Standard Sit-Ups: 3x10-15. 2. Weighted Sit-Ups (use backpack): 3x8-12. 3. Bicycle Crunches: 3x12-15/side. 4. Hanging Knee Tucks: 3x8-10."+"\n\n3-5 times/week." },
+        { ("sit-up", "advanced"), @"Sit-Up Training Program – Advanced (30+ reps) 1. Weighted Sit-Ups: 4x12-15. 2. Decline Sit-Ups: 3-4x8-12. 3. Hanging Leg Raises: 3-4x8-12. 4. V-Ups: 3x10-15. 5. Resistance Band Sit-Ups: 3x12-15."+"\n\n3-5 times/week to sustain performance." },
 
         // RUNNING
-        { ("running", "beginner"), @"Running Beginner Plan: 1. Run-Walk Intervals: 1min run + 2min walk for 20-30min, 3-4x/week. 2. LISS Runs: 20-30min steady pace. Tips: Maintain upright posture, land mid-foot, increase mileage max 10%/week." },
-        { ("running", "amateur"), @"Running Amateur Plan: 1. Tempo Runs: 15-20min 'comfortably hard'. 2. Intervals: 6x200m sprints with 1-2min rest. 3. Long Slow Runs: 40-60min weekly. Add strides (4-6x60-80m) for turnover. Run 4-5x/week." },
+        { ("running", "beginner"), @"Running Beginner Plan: 1. Run-Walk Intervals: 1min run + 2min walk for 20-30min, 3-4x/week. 2. LISS Runs: 20-30min steady pace."+"\n\nTips: Maintain upright posture, land mid-foot, increase mileage max 10%/week." },
+        { ("running", "amateur"), @"Running Amateur Plan: 1. Tempo Runs: 15-20min 'comfortably hard'. 2. Intervals: 6x200m sprints with 1-2min rest. 3. Long Slow Runs: 40-60min weekly."+"\n\nAdd strides (4-6x60-80m) for turnover. Run 4-5x/week." },
         { ("running", "advanced"), @"Running Advanced Plan: 1. Ladder Intervals (e.g., 400-800-1200m) at 85-95% effort. 2. Progression Long Run: 60-80min, finish at tempo pace. 3. Fartlek: 30-50min with random bursts. 4. Hill Repeats: 8-10x50-100m hill sprints. 5-6x/week, plus recovery work." },
 
         // General Tips
@@ -67,6 +67,12 @@ public class AnswerRepository
 
         if (answer == null) return null;
 
+// (?<=\s|^): A lookbehind assertion that checks if the match is preceded by either:
+// \s – a whitespace character (space, tab, etc.)
+// ^ – the start of the string
+// (\d+\.): Matches one or more digits (\d+) followed by a literal dot (.). This part is captured for replacement.
+// "\n$1": Replaces the matched number-dot combo by inserting a newline before it.//
+// $1 refers to the captured group (\d+\.), i.e., the actual numbered item.//
         answer = Regex.Replace(answer, @"(?<=\s|^)(\d+\.)", "\n$1");
 
         return answer.Trim();
@@ -74,7 +80,7 @@ public class AnswerRepository
 
     public static string HandleIPPTCheck(string gender, string ageStr, string pushupStr, string situpStr, string runtimeStr)
     {
-        string genderNormalized = gender?.Trim().ToLower();
+        string? genderNormalized = gender?.Trim().ToLower();
         if (genderNormalized == "m") genderNormalized = "male";
         else if (genderNormalized == "f") genderNormalized = "female";
 
