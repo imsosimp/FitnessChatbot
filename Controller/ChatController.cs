@@ -37,91 +37,171 @@ public class ChatController : ControllerBase
         _nlu = nlu;
         _repo = repo;
     }
-
+    
     [HttpPost]
     public IActionResult Post([FromBody] ChatRequest request)
     {
         if (string.IsNullOrWhiteSpace(request?.Message))
-        {
-            return Ok(new ChatResponse { Response = "Sorry, I couldn't understand your question." });
-        }
+            return Respond("Sorry, I couldn't understand your question.");
 
         string message = request.Message.ToLower().Trim();
         Console.WriteLine("[BOT] User Message: " + message);
 
-        if (Regex.IsMatch(message, @"\b(bye|good\s?bye|good‑bye|see\s+you|exit)\b",
-                        RegexOptions.IgnoreCase))
-        {
-            ClearSession();
-            ClearIpptSession();
-            return Ok(new ChatResponse {
-                Response = "Good‑bye 👋 Stay active and take care!",
-                EndChat  = true
-            });
-        }       
-
-        if (Regex.IsMatch(message, @"\bwhy\s+is\s+ippt\b") ||
-            Regex.IsMatch(message, @"\bwhat\s+is\s+ippt\b"))
-        {
-            var answer = _repo.GetAnswer("ippt", message.Contains("why") ? "why" : "what");
-            return Ok(new ChatResponse { Response = answer });
-        }
-
-        var reverseFlow = HttpContext.Session.GetString(SessionIpptReverseFlowKey);
-        if (reverseFlow == "true")
-        {
-            Console.WriteLine("[BOT] Entering Reverse IPPT Flow...");
-            return HandleIpptReverseFlow(message);
-        }
-
-        var ipptFlow = HttpContext.Session.GetString(SessionIpptFlowKey);
-        if (ipptFlow == "true")
-        {
-            return HandleIpptFlow(message);
-        }
-
         var intent = _nlu.Classify(message);
+
+        if (HttpContext.Session.GetString(SessionIpptFlowKey) == "true")
+            return HandleIpptCheckFlow(intent);
+
+        if (HttpContext.Session.GetString(SessionIpptReverseFlowKey) == "true")
+            return HandleReverseIpptFlow(message);
+
+        if (intent.QuestionType == "ippt_check" || _nlu.IsIPPTCheckRequest(message))
+            return StartIpptFlow();
+
+        if (_nlu.IsReverseIpptQuery(message) || 
+            (!string.IsNullOrEmpty(intent.Level) && 
+            Regex.IsMatch(intent.Level, @"\b(pass|silver|gold)\b", RegexOptions.IgnoreCase)))
+        {
+            Console.WriteLine("[BOT] Handling Reverse IPPT");
+            return StartReverseFlow(message);
+        }
         
-        if (_nlu.IsReverseIpptQuery(message))
+        if (intent.MiscIntent is "greeting" or "thanks" or "farewell")
+            return HandleGeneralIntent(intent, message);
+    
+        if (IsGoodbye(message)) return HandleFarewell();
+        if (IsWhatOrWhyIppt(message)) return HandleWhatWhyIppt(message);
+
+        if (IsRequestingIpptTips(message))
         {
-            Console.WriteLine("[BOT] Reverse IPPT query detected.");
-            HttpContext.Session.SetString(SessionIpptReverseFlowKey, "true");
-
-            var match = Regex.Match(message, @"\b(pass|silver|gold)\b", RegexOptions.IgnoreCase);
-            if (match.Success)
-            {
-                var target = match.Value.ToLower();
-                HttpContext.Session.SetString(SessionIpptTargetKey, target);
-                Console.WriteLine($"[BOT] Target level set: {target}");
-            }
-
-            return Ok(new ChatResponse { Response = "Sure! Let's find out what you need to score that. First, what's your gender, 'male' or 'female' (or 'm'/'f')" });
+            Console.WriteLine("[BOT] Handling IPPT Tips");
+            return HandleIpptTips();
         }
 
-        switch (intent.MiscIntent)
+        if (intent.QuestionType == "tips")
+            return HandleTipsFlow(intent, message);    
+
+        if (!string.IsNullOrEmpty(intent.QuestionType))
+            return HandleGenericQuestion(intent, message);
+
+        return HandleTrainingPlan(intent, message);
+    }
+
+    private bool IsGoodbye(string msg) =>
+    Regex.IsMatch(msg, @"\b(bye|good\s?bye|good‑bye|see\s+you|exit)\b", RegexOptions.IgnoreCase);
+
+    private bool IsWhatOrWhyIppt(string msg) =>
+        Regex.IsMatch(msg, @"\bwhy\s+is\s+ippt\b") || Regex.IsMatch(msg, @"\bwhat\s+is\s+ippt\b");
+
+    private bool IsRequestingIpptTips(string msg)
+    {
+        msg = msg.ToLower();
+        return msg.Contains("ippt") &&
+            Regex.IsMatch(msg, @"\b(improve|increase|boost|better|enhance|progress)\b", RegexOptions.IgnoreCase) &&
+            !Regex.IsMatch(msg, @"\b(pass|silver|gold)\b", RegexOptions.IgnoreCase);
+    }
+    private IActionResult Respond(string message, bool endChat = false) =>
+        Ok(new ChatResponse { Response = message, EndChat = endChat });
+
+    private IActionResult HandleFarewell()
+    {
+        ClearSession();
+        ClearIpptSession();
+        return Ok(new ChatResponse
         {
-            case "greeting":
-                return Ok(new ChatResponse { Response = "Hi there 👋 How can I help you today?" });
+            Response = "Good‑bye 👋 Stay active and take care!",
+            EndChat = true
+        });
+    }
 
-            case "thanks":
-                return Ok(new ChatResponse { Response = "You’re welcome! Let me know if I can help with anything else." });
+    private IActionResult HandleWhatWhyIppt(string message)
+    {
+        var reason = message.Contains("why") ? "why" : "what";
+        var answer = _repo.GetAnswer("ippt", reason);
+        return Ok(new ChatResponse { Response = answer });
+    }
 
-            case "farewell":
-                ClearSession();
-                ClearIpptSession();
+    private IActionResult HandleReverseIpptFlow(string message)
+    {
+        Console.WriteLine("[BOT] Entering Reverse IPPT Flow...");
+        return HandleIpptReverseFlow(message);
+    }
 
-                return Ok(new ChatResponse { Response = "Good‑bye 👋 Stay active and take care!", EndChat = true });
+    private IActionResult HandleIpptCheckFlow(IntentResult intent)
+    {
+        return HandleIpptFlow(intent.QuestionType);
+    }
+
+    private IActionResult HandleGeneralIntent(IntentResult intent, string message)
+    {
+        return intent.MiscIntent switch
+        {
+            "greeting" => Ok(new ChatResponse { Response = "Hi there 👋 How can I help you today?" }),
+            "thanks" => Ok(new ChatResponse { Response = "You're welcome! Let me know if I can help with anything else." }),
+            "farewell" => HandleFarewell(),
+            _ => null
+        };
+    }
+
+    private IActionResult StartIpptFlow()
+    {
+        HttpContext.Session.SetString(SessionIpptFlowKey, "true");
+        return Ok(new ChatResponse { Response = "Please specify your gender as 'male' or 'female' (you can also enter 'm' or 'f')." });
+    }
+
+    private IActionResult StartReverseFlow(string message)
+    {
+        Console.WriteLine("[BOT] Reverse IPPT query detected.");
+        HttpContext.Session.SetString(SessionIpptReverseFlowKey, "true");
+
+        var match = Regex.Match(message, @"\b(pass|silver|gold)\b", RegexOptions.IgnoreCase);
+        if (match.Success)
+        {
+            var target = match.Value.ToLower();
+            HttpContext.Session.SetString(SessionIpptTargetKey, target);
+            Console.WriteLine($"[BOT] Target level set: {target}");
         }
 
-        if (intent.QuestionType == "ippt_check" || IsIPPTCheckRequest(message))
+        return Ok(new ChatResponse { Response = "Sure! Let's find out what you need to score that. First, what's your gender, 'male' or 'female' (or 'm'/'f')" });
+    }
+
+    private IActionResult HandleIpptTips()
+    {
+        string tips = _repo.GetAnswer("general", "tips");
+        return Ok(new ChatResponse { Response = tips });
+    }
+
+    private IActionResult HandleTipsFlow(IntentResult intent, string message)
+    {
+        var fieldToUse = NormalizeField(intent.Field) ?? _nlu.DetectField(message);
+        var tips = _repo.GetAnswer(fieldToUse, "tips");
+        return Ok(new ChatResponse { Response = tips });
+    }
+
+    private IActionResult HandleGenericQuestion(IntentResult intent, string message)
+    {
+        var fieldToUse = NormalizeField(intent.Field) ?? intent.Field;
+
+        if (!string.IsNullOrEmpty(fieldToUse) &&
+            (intent.QuestionType == "what" || intent.QuestionType == "muscle"))
         {
-            HttpContext.Session.SetString(SessionIpptFlowKey, "true");
-            return Ok(new ChatResponse { Response = "Please specify your gender as 'male' or 'female' (you can also enter 'm' or 'f')." });
+            var muscleInfo = _repo.GetAnswer(fieldToUse, "muscle");
+            if (!string.IsNullOrEmpty(muscleInfo))
+                return Ok(new ChatResponse { Response = muscleInfo });
         }
 
-        // General tips
+        var generalAnswer = _repo.GetAnswer(fieldToUse, intent.QuestionType);
+        if (!string.IsNullOrEmpty(generalAnswer))
+            return Ok(new ChatResponse { Response = generalAnswer });
+
+        return null;
+    }
+    
+    private IActionResult HandleTrainingPlan(IntentResult intent, string message)
+    {
+        // General improvement tips for IPPT
         if (message.Contains("ippt") &&
-            Regex.IsMatch(message, @"\b(improve|increase|boost|better|enhance|progress)\b"))
+            Regex.IsMatch(message, @"\b(improve|increase|boost|better|enhance|progress)\b", RegexOptions.IgnoreCase))
         {
             string generalTips = _repo.GetAnswer("general", "tips");
             return Ok(new ChatResponse { Response = generalTips });
@@ -167,9 +247,7 @@ public class ChatController : ControllerBase
 
         if (!string.IsNullOrEmpty(intent.QuestionType) && intent.QuestionType == "tips")
         {
-            // Figure out which exercise/bodypart the user mentioned
             var fieldToUse = normalizedField ?? _nlu.DetectField(message);
-
             var tipsAnswer = _repo.GetAnswer(fieldToUse, "tips");
             if (!string.IsNullOrEmpty(tipsAnswer))
                 return Ok(new ChatResponse { Response = tipsAnswer });
@@ -186,12 +264,11 @@ public class ChatController : ControllerBase
             return Ok(new ChatResponse { Response = "Sorry, I couldn't find any tips for that topic." });
         }
 
-        Console.WriteLine($"[ChatController] intent.Field={intent.Field}, normalizedField={normalizedField}, prevField={prevField}, prevLevel={prevLevel}");
+        // Prompt for level if field is set but level is missing
         if (!string.IsNullOrEmpty(prevField) && string.IsNullOrEmpty(prevLevel))
         {
             if (HasImproveIntent(message))
             {
-                // User wants to improve but hasn't given level → prompt for level
                 string levelPrompt = prevField switch
                 {
                     "push-up" or "sit-up" =>
@@ -210,52 +287,9 @@ public class ChatController : ControllerBase
 
                 return Ok(new ChatResponse { Response = levelPrompt });
             }
-            // else
-            // {
-            //     // Generic training plan prompt
-            //     string levelPrompt = prevField switch
-            //     {
-            //         "push-up" or "sit-up" =>
-            //             "To provide the best training plan, please tell me your current level:\n" +
-            //             "- Beginner: 0-20 reps in one minute\n" +
-            //             "- Amateur: 20-40 reps in one minute\n" +
-            //             "- Advanced: 40+ reps in one minute",
-            //         "running" =>
-            //             "To provide the best training plan, please tell me your current level:\n" +
-            //             "- Beginner: 2.4km in 14 minutes or more\n" +
-            //             "- Amateur: 13:59 to 11:00\n" +
-            //             "- Advanced: 10:59 or faster",
-            //         _ =>
-            //             $"To provide the best training plan for your {prevField}, please tell me your level:\n- Beginner\n- Amateur\n- Advanced"
-            //     };
-
-            //     return Ok(new ChatResponse { Response = levelPrompt });
-            // }
         }
 
-        if (!string.IsNullOrEmpty(intent.QuestionType))
-        {
-            var fieldToUse = normalizedField ?? intent.Field;
-
-            // Specifically handle questions about muscles/body parts
-            if (!string.IsNullOrEmpty(fieldToUse) && 
-                (intent.QuestionType == "what" || intent.QuestionType == "muscle"))
-            {
-                var targetAnswer = _repo.GetAnswer(fieldToUse, "muscle");
-                if (!string.IsNullOrEmpty(targetAnswer))
-                {
-                    return Ok(new ChatResponse { Response = targetAnswer });
-                }
-            }
-
-            // General question intent fallback
-            var generalAnswer = _repo.GetAnswer(fieldToUse, intent.QuestionType);
-            if (!string.IsNullOrEmpty(generalAnswer))
-            {
-                return Ok(new ChatResponse { Response = generalAnswer });
-            }
-        }
-
+        // Return specific plan if both field and level are set
         if (!string.IsNullOrEmpty(prevField) && !string.IsNullOrEmpty(prevLevel))
         {
             var answer = _repo.GetAnswer(prevField, prevLevel);
@@ -273,9 +307,248 @@ public class ChatController : ControllerBase
 
         return Ok(new ChatResponse
         {
-            Response = "Sorry, I couldn't process your request. Could you please rephrase or be more specific?"
+            Response = "Could you tell me more about the exercise or body part you're trying to improve?"
         });
     }
+
+    // [HttpPost]
+    // public IActionResult Post([FromBody] ChatRequest request)
+    // {
+    //     if (string.IsNullOrWhiteSpace(request?.Message))
+    //     {
+    //         return Ok(new ChatResponse { Response = "Sorry, I couldn't understand your question." });
+    //     }
+
+    //     string message = request.Message.ToLower().Trim();
+    //     Console.WriteLine("[BOT] User Message: " + message);
+
+    //     if (Regex.IsMatch(message, @"\b(bye|good\s?bye|good‑bye|see\s+you|exit)\b",
+    //                     RegexOptions.IgnoreCase))
+    //     {
+    //         ClearSession();
+    //         ClearIpptSession();
+    //         return Ok(new ChatResponse {
+    //             Response = "Good‑bye 👋 Stay active and take care!",
+    //             EndChat  = true
+    //         });
+    //     }       
+
+    //     if (Regex.IsMatch(message, @"\bwhy\s+is\s+ippt\b") ||
+    //         Regex.IsMatch(message, @"\bwhat\s+is\s+ippt\b"))
+    //     {
+    //         var answer = _repo.GetAnswer("ippt", message.Contains("why") ? "why" : "what");
+    //         return Ok(new ChatResponse { Response = answer });
+    //     }
+
+    //     var reverseFlow = HttpContext.Session.GetString(SessionIpptReverseFlowKey);
+    //     if (reverseFlow == "true")
+    //     {
+    //         Console.WriteLine("[BOT] Entering Reverse IPPT Flow...");
+    //         return HandleIpptReverseFlow(message);
+    //     }
+
+    //     var ipptFlow = HttpContext.Session.GetString(SessionIpptFlowKey);
+    //     if (ipptFlow == "true")
+    //     {
+    //         return HandleIpptFlow(message);
+    //     }
+
+    //     var intent = _nlu.Classify(message);
+
+    //     if (_nlu.IsReverseIpptQuery(message))
+    //     {
+    //         Console.WriteLine("[BOT] Reverse IPPT query detected.");
+    //         HttpContext.Session.SetString(SessionIpptReverseFlowKey, "true");
+
+    //         var match = Regex.Match(message, @"\b(pass|silver|gold)\b", RegexOptions.IgnoreCase);
+    //         if (match.Success)
+    //         {
+    //             var target = match.Value.ToLower();
+    //             HttpContext.Session.SetString(SessionIpptTargetKey, target);
+    //             Console.WriteLine($"[BOT] Target level set: {target}");
+    //         }
+
+    //         return Ok(new ChatResponse { Response = "Sure! Let's find out what you need to score that. First, what's your gender, 'male' or 'female' (or 'm'/'f')" });
+    //     }
+
+    //     switch (intent.MiscIntent)
+    //     {
+    //         case "greeting":
+    //             return Ok(new ChatResponse { Response = "Hi there 👋 How can I help you today?" });
+
+    //         case "thanks":
+    //             return Ok(new ChatResponse { Response = "You’re welcome! Let me know if I can help with anything else." });
+
+    //         case "farewell":
+    //             ClearSession();
+    //             ClearIpptSession();
+
+    //             return Ok(new ChatResponse { Response = "Good‑bye 👋 Stay active and take care!", EndChat = true });
+    //     }
+
+    //     if (intent.QuestionType == "ippt_check" || _nlu.IsIPPTCheckRequest(message))
+    //     {
+    //         HttpContext.Session.SetString(SessionIpptFlowKey, "true");
+    //         return Ok(new ChatResponse { Response = "Please specify your gender as 'male' or 'female' (you can also enter 'm' or 'f')." });
+    //     }
+
+    //     // General tips
+    //     if (message.Contains("ippt") &&
+    //         Regex.IsMatch(message, @"\b(improve|increase|boost|better|enhance|progress)\b"))
+    //     {
+    //         string generalTips = _repo.GetAnswer("general", "tips");
+    //         return Ok(new ChatResponse { Response = generalTips });
+    //     }
+
+    //     // Normalize and map fields
+    //     string normalizedField = NormalizeField(intent.Field);
+    //     if (normalizedField == "bodypart" && !string.IsNullOrEmpty(message))
+    //     {
+    //         var mappedExercise = _nlu.MapBodypartToExercise(message);
+    //         if (!string.IsNullOrEmpty(mappedExercise))
+    //         {
+    //             normalizedField = mappedExercise;
+    //         }
+    //         else
+    //         {
+    //             normalizedField = intent.Field;
+    //         }
+    //     }
+
+    //     var prevField = HttpContext.Session.GetString(SessionFieldKey);
+    //     var prevLevel = HttpContext.Session.GetString(SessionLevelKey);
+
+    //     if (HasNegativeIntent(message) && !HasImproveIntent(message))
+    //     {
+    //         return Ok(new ChatResponse
+    //         {
+    //             Response = "It looks like you're not looking to train right now. Let me know if you have any other questions!"
+    //         });
+    //     }
+
+    //     if (!string.IsNullOrEmpty(normalizedField))
+    //     {
+    //         HttpContext.Session.SetString(SessionFieldKey, normalizedField);
+    //         prevField = normalizedField;
+    //     }
+
+    //     if (!string.IsNullOrEmpty(intent.Level))
+    //     {
+    //         HttpContext.Session.SetString(SessionLevelKey, intent.Level);
+    //         prevLevel = intent.Level;
+    //     }
+
+    //     if (!string.IsNullOrEmpty(intent.QuestionType) && intent.QuestionType == "tips")
+    //     {
+    //         // Figure out which exercise/bodypart the user mentioned
+    //         var fieldToUse = normalizedField ?? _nlu.DetectField(message);
+
+    //         var tipsAnswer = _repo.GetAnswer(fieldToUse, "tips");
+    //         if (!string.IsNullOrEmpty(tipsAnswer))
+    //             return Ok(new ChatResponse { Response = tipsAnswer });
+    //     }
+
+    //     if (intent.Field == "tips" || prevField == "tips")
+    //     {
+    //         var tipsAnswer = _repo.GetAnswer(prevField, "tips");
+    //         if (!string.IsNullOrEmpty(tipsAnswer))
+    //         {
+    //             ClearSession();
+    //             return Ok(new ChatResponse { Response = tipsAnswer });
+    //         }
+    //         return Ok(new ChatResponse { Response = "Sorry, I couldn't find any tips for that topic." });
+    //     }
+
+    //     Console.WriteLine($"[ChatController] intent.Field={intent.Field}, normalizedField={normalizedField}, prevField={prevField}, prevLevel={prevLevel}");
+    //     if (!string.IsNullOrEmpty(prevField) && string.IsNullOrEmpty(prevLevel))
+    //     {
+    //         if (HasImproveIntent(message))
+    //         {
+    //             // User wants to improve but hasn't given level → prompt for level
+    //             string levelPrompt = prevField switch
+    //             {
+    //                 "push-up" or "sit-up" =>
+    //                     "To help you improve, please tell me your current level:\n" +
+    //                     "- Beginner: 0-20 reps in one minute\n" +
+    //                     "- Amateur: 20-40 reps in one minute\n" +
+    //                     "- Advanced: 40+ reps in one minute",
+    //                 "running" =>
+    //                     "To help you improve, please tell me your current level:\n" +
+    //                     "- Beginner: 2.4km in 14 minutes or more\n" +
+    //                     "- Amateur: 13:59 to 11:00\n" +
+    //                     "- Advanced: 10:59 or faster",
+    //                 _ =>
+    //                     $"To help you improve your {prevField}, please tell me your level:\n- Beginner\n- Amateur\n- Advanced"
+    //             };
+
+    //             return Ok(new ChatResponse { Response = levelPrompt });
+    //         }
+    //         // else
+    //         // {
+    //         //     // Generic training plan prompt
+    //         //     string levelPrompt = prevField switch
+    //         //     {
+    //         //         "push-up" or "sit-up" =>
+    //         //             "To provide the best training plan, please tell me your current level:\n" +
+    //         //             "- Beginner: 0-20 reps in one minute\n" +
+    //         //             "- Amateur: 20-40 reps in one minute\n" +
+    //         //             "- Advanced: 40+ reps in one minute",
+    //         //         "running" =>
+    //         //             "To provide the best training plan, please tell me your current level:\n" +
+    //         //             "- Beginner: 2.4km in 14 minutes or more\n" +
+    //         //             "- Amateur: 13:59 to 11:00\n" +
+    //         //             "- Advanced: 10:59 or faster",
+    //         //         _ =>
+    //         //             $"To provide the best training plan for your {prevField}, please tell me your level:\n- Beginner\n- Amateur\n- Advanced"
+    //         //     };
+
+    //         //     return Ok(new ChatResponse { Response = levelPrompt });
+    //         // }
+    //     }
+
+    //     if (!string.IsNullOrEmpty(intent.QuestionType))
+    //     {
+    //         var fieldToUse = normalizedField ?? intent.Field;
+
+    //         // Specifically handle questions about muscles/body parts
+    //         if (!string.IsNullOrEmpty(fieldToUse) && 
+    //             (intent.QuestionType == "what" || intent.QuestionType == "muscle"))
+    //         {
+    //             var targetAnswer = _repo.GetAnswer(fieldToUse, "muscle");
+    //             if (!string.IsNullOrEmpty(targetAnswer))
+    //             {
+    //                 return Ok(new ChatResponse { Response = targetAnswer });
+    //             }
+    //         }
+
+    //         // General question intent fallback
+    //         var generalAnswer = _repo.GetAnswer(fieldToUse, intent.QuestionType);
+    //         if (!string.IsNullOrEmpty(generalAnswer))
+    //         {
+    //             return Ok(new ChatResponse { Response = generalAnswer });
+    //         }
+    //     }
+
+    //     if (!string.IsNullOrEmpty(prevField) && !string.IsNullOrEmpty(prevLevel))
+    //     {
+    //         var answer = _repo.GetAnswer(prevField, prevLevel);
+    //         if (!string.IsNullOrEmpty(answer))
+    //         {
+    //             ClearSession();
+    //             return Ok(new ChatResponse { Response = answer });
+    //         }
+
+    //         return Ok(new ChatResponse
+    //         {
+    //             Response = $"I recognized your level as '{prevLevel}', but couldn't find a training plan for '{prevField}'. Please check the training area or try rephrasing."
+    //         });
+    //     }
+
+    //     return Ok(new ChatResponse
+    //     {
+    //         Response = "Sorry, I couldn't process your request. Could you please rephrase or be more specific?"
+    //     });
+    // }
 
     private IActionResult? CheckRetries(string key, string cancelMessage)
     {
@@ -286,13 +559,13 @@ public class ChatController : ControllerBase
 
         if (retries >= 5)
         {
-            ClearIpptSession();          
-            return Ok(new ChatResponse  
+            ClearIpptSession();
+            return Ok(new ChatResponse
             {
                 Response = cancelMessage
             });
         }
-        return null;           
+        return null;
     }
 
     private IActionResult HandleIpptFlow(string message)
@@ -458,23 +731,6 @@ public class ChatController : ControllerBase
         };
     }
 
-    private bool IsIPPTCheckRequest(string message)
-    {
-        if (string.IsNullOrEmpty(message)) return false;
-
-        // Quick checks for common phrasing
-        if (message.Contains("ippt check", StringComparison.OrdinalIgnoreCase) ||
-            message.Contains("check ippt", StringComparison.OrdinalIgnoreCase) ||
-            (message.Contains("ippt", StringComparison.OrdinalIgnoreCase) &&
-            message.Contains("result", StringComparison.OrdinalIgnoreCase)))
-        {
-            return true;
-        }
-
-        // General regex to match any keywords like ippt, score, result, performance
-        return Regex.IsMatch(message, @"\b(check|score|result|performance)\b", RegexOptions.IgnoreCase);
-    }
-
     private IActionResult HandleIpptReverseFlow(string message)
     {
         var session = HttpContext.Session;
@@ -602,7 +858,7 @@ public class ChatController : ControllerBase
                 return ProceedToReverseScore();
             }
             return Ok(new ChatResponse { Response = "Please enter time in MM:SS format (e.g., 11:30)." });
-        }        
+        }
 
         return Ok(new ChatResponse { Response = "Thanks! Let me know the last station if you know it, or reply 'no' to proceed." });
     }

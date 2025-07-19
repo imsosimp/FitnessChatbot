@@ -58,8 +58,8 @@ public class AnswerRepository
         // Map shared fields
         field = field switch
         {
-            "chest" or "triceps" => "push-up",
-            "abs" => "sit-up",
+            "chest" or "triceps" or "tricep" => "push-up",
+            "abs" or "ab" => "sit-up",
             "hip" => "sit-up",
             _ => field
         };

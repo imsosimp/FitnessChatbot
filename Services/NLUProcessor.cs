@@ -81,39 +81,120 @@ public class NLUProcessor
         return null;
     }
 
-    public string DetectIntent(string message)
+    public IntentResult Classify(string message)
     {
-        message = message.ToLower();
+        message = message.ToLower().Trim();
 
-        // IPPT intent detection
-        // if (Regex.IsMatch(message, @"\b(check|score|result|performance)\b"))
-        // {
-        //     return "IPPT_CHECK";
-        // }
+        var result = new IntentResult
+        {
+            Field = DetectField(message),
+            Level = DetectLevel(message),
+            QuestionType = DetectQuestionIntent(message),
+            Gender = DetectGender(message),
+            MiscIntent = DetectMiscIntent(message)
+        };
+
+        // IPPT Check detection (based on stricter match)
         if (Regex.IsMatch(message, @"\bippt\b") &&
             Regex.IsMatch(message, @"\b(check|score|result|performance)\b"))
         {
-            return "IPPT_CHECK";
+            Console.WriteLine("[NLU] Intent matched for IPPT_CHECK with keywords: ippt + check/score/result/performance");
+            result.QuestionType = "ippt_check"; // override if needed
         }
 
-        // Fallback: check question intents
-        string questionType = DetectQuestionIntent(message);
-        if (questionType != null)
+        return result;
+    }
+
+    // public IntentResult Classify(string message)
+    // {
+    //     message = message.ToLower();
+
+    //     return new IntentResult
+    //     {
+    //         Field = DetectField(message),
+    //         Level = DetectLevel(message),
+    //         QuestionType = DetectQuestionIntent(message),
+    //         Gender = DetectGender(message),
+    //         MiscIntent = DetectMiscIntent(message)
+    //     };
+    // }
+
+    // public string DetectIntent(string message)
+    // {
+    //     message = message.ToLower();
+
+    //     // IPPT intent detection
+    //     // if (Regex.IsMatch(message, @"\b(check|score|result|performance)\b"))
+    //     // {
+    //     //     return "IPPT_CHECK";
+    //     // }
+    //     if (Regex.IsMatch(message, @"\bippt\b") &&
+    //         Regex.IsMatch(message, @"\b(check|score|result|performance)\b"))
+    //     {
+    //         Console.WriteLine("[NLU] Intent matched for IPPT_CHECK with keywords: ippt + check/score/result/performance");
+    //         return "IPPT_CHECK";
+    //     }
+
+    //     // Fallback: check question intents
+    //     string questionType = DetectQuestionIntent(message);
+    //     if (questionType != null)
+    //     {
+    //         Console.WriteLine($"[NLU] Question-type intent detected: {questionType}");            
+    //         return "QUESTION";
+    //     }
+
+    //     // Unknown if nothing else matched
+    //     return "UNKNOWN";
+    // }    
+
+    public bool IsIPPTCheckRequest(string message)
+    {
+        if (string.IsNullOrEmpty(message)) return false;
+
+        if (message.Contains("ippt check", StringComparison.OrdinalIgnoreCase))
         {
-            return "QUESTION";
+            Console.WriteLine("[BOT] Matched phrase: 'ippt check'");
+            return true;
         }
 
-        // Unknown if nothing else matched
-        return "UNKNOWN";
+        if (message.Contains("check ippt", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("[BOT] Matched phrase: 'check ippt'");
+            return true;
+        }
+
+        if (message.Contains("ippt", StringComparison.OrdinalIgnoreCase) &&
+            message.Contains("result", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("[BOT] Matched combined keywords: 'ippt' and 'result'");
+            return true;
+        }
+
+        if (Regex.IsMatch(message, @"\b(check|score|result|performance)\b", RegexOptions.IgnoreCase))
+        {
+            Console.WriteLine("[BOT] Matched general intent keyword: check/score/result/performance");
+            return true;
+        }
+
+        return false;
     }
 
     public bool IsReverseIpptQuery(string message)
-    {   
+    {
         Console.WriteLine("[NLU] Checking for reverse IPPT query: " + message);
         message = message.ToLower();
-        return Regex.IsMatch(message, @"\b(pass|silver|gold)\b") &&
-               Regex.IsMatch(message, @"\bippt\b")||
-                message.Contains("ippt", StringComparison.OrdinalIgnoreCase);
+
+        bool hasResultKeyword = Regex.IsMatch(message, @"\b(pass|silver|gold)\b");
+        bool hasIpptKeyword = Regex.IsMatch(message, @"\bippt\b");
+
+        if (hasResultKeyword) Console.WriteLine("[NLU] Matched reverse keyword: pass/silver/gold");
+        if (hasIpptKeyword) Console.WriteLine("[NLU] Matched keyword: ippt");
+
+        bool isMatch = hasResultKeyword || hasIpptKeyword;
+
+        if (isMatch) Console.WriteLine("[NLU] Reverse IPPT query detected by IsReverseIpptQuery");
+
+        return isMatch;
     }
 
     // public bool IsReverseIpptQuery(string message)
@@ -123,26 +204,6 @@ public class NLUProcessor
     //            Regex.IsMatch(message, @"\b(pass|silver|gold)\b", RegexOptions.IgnoreCase) ||
     //            message.Contains("ippt", StringComparison.OrdinalIgnoreCase);
     // }
-
-    public IntentResult Classify(string message)
-    {
-        message = message.ToLower();
-
-        string field = DetectField(message);
-        string level = DetectLevel(message);
-        string questionType = DetectQuestionIntent(message);
-        string gender = DetectGender(message);
-        string MiscIntent = DetectMiscIntent(message);
-
-        return new IntentResult
-        {
-            Field = DetectField(message),
-            Level = DetectLevel(message),
-            QuestionType = DetectQuestionIntent(message),
-            Gender = DetectGender(message),
-            MiscIntent = DetectMiscIntent(message)
-        };
-    }
 
     public string DetectField(string message)
     {
