@@ -19,6 +19,11 @@ public class ChatController : ControllerBase
     private const string SessionIpptSitupsKey = "IpptSitups";
     private const string SessionIpptRuntimeKey = "IpptRuntime";
     private const string SessionIpptGenderKey = "IpptGender";
+    private const string SessionIpptTargetKey = "IpptTarget"; // gold/silver/pass
+    private const string SessionIpptReverseFlowKey = "IpptReverseFlow";
+    // private const string SessionIpptKnownStationsKey = "IpptKnownStations"; // pushup,situp or runtime
+    private const string SessionGenderKey = "ippt_gender";
+    private const string SessionAgeKey = "ippt_age";
 
     private readonly string[] NegativeIntentKeywords = {
         "slow", "avoid", "hate", "dislike", "don't want", "dont want", "not interested", "skip", "fail"
@@ -42,21 +47,56 @@ public class ChatController : ControllerBase
         }
 
         string message = request.Message.ToLower().Trim();
+        Console.WriteLine("[BOT] User Message: " + message);
+
+        if (Regex.IsMatch(message, @"\b(bye|good\s?bye|good‑bye|see\s+you|exit)\b",
+                        RegexOptions.IgnoreCase))
+        {
+            ClearSession();
+            ClearIpptSession();
+            return Ok(new ChatResponse {
+                Response = "Good‑bye 👋 Stay active and take care!",
+                EndChat  = true
+            });
+        }       
 
         if (Regex.IsMatch(message, @"\bwhy\s+is\s+ippt\b") ||
             Regex.IsMatch(message, @"\bwhat\s+is\s+ippt\b"))
-            {
-                var answer = _repo.GetAnswer("ippt", message.Contains("why") ? "why" : "what");
-                return Ok(new ChatResponse { Response = answer });
-            }
+        {
+            var answer = _repo.GetAnswer("ippt", message.Contains("why") ? "why" : "what");
+            return Ok(new ChatResponse { Response = answer });
+        }
+
+        var reverseFlow = HttpContext.Session.GetString(SessionIpptReverseFlowKey);
+        if (reverseFlow == "true")
+        {
+            Console.WriteLine("[BOT] Entering Reverse IPPT Flow...");
+            return HandleIpptReverseFlow(message);
+        }
 
         var ipptFlow = HttpContext.Session.GetString(SessionIpptFlowKey);
         if (ipptFlow == "true")
         {
             return HandleIpptFlow(message);
         }
-    
+
         var intent = _nlu.Classify(message);
+        
+        if (_nlu.IsReverseIpptQuery(message))
+        {
+            Console.WriteLine("[BOT] Reverse IPPT query detected.");
+            HttpContext.Session.SetString(SessionIpptReverseFlowKey, "true");
+
+            var match = Regex.Match(message, @"\b(pass|silver|gold)\b", RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                var target = match.Value.ToLower();
+                HttpContext.Session.SetString(SessionIpptTargetKey, target);
+                Console.WriteLine($"[BOT] Target level set: {target}");
+            }
+
+            return Ok(new ChatResponse { Response = "Sure! Let's find out what you need to score that. First, what's your gender, 'male' or 'female' (or 'm'/'f')" });
+        }
 
         switch (intent.MiscIntent)
         {
@@ -69,6 +109,7 @@ public class ChatController : ControllerBase
             case "farewell":
                 ClearSession();
                 ClearIpptSession();
+
                 return Ok(new ChatResponse { Response = "Good‑bye 👋 Stay active and take care!", EndChat = true });
         }
 
@@ -76,6 +117,14 @@ public class ChatController : ControllerBase
         {
             HttpContext.Session.SetString(SessionIpptFlowKey, "true");
             return Ok(new ChatResponse { Response = "Please specify your gender as 'male' or 'female' (you can also enter 'm' or 'f')." });
+        }
+
+        // General tips
+        if (message.Contains("ippt") &&
+            Regex.IsMatch(message, @"\b(improve|increase|boost|better|enhance|progress)\b"))
+        {
+            string generalTips = _repo.GetAnswer("general", "tips");
+            return Ok(new ChatResponse { Response = generalTips });
         }
 
         // Normalize and map fields
@@ -161,27 +210,27 @@ public class ChatController : ControllerBase
 
                 return Ok(new ChatResponse { Response = levelPrompt });
             }
-            else
-            {
-                // No improve intent → generic training plan prompt
-                string levelPrompt = prevField switch
-                {
-                    "push-up" or "sit-up" =>
-                        "To provide the best training plan, please tell me your current level:\n" +
-                        "- Beginner: 0-20 reps in one minute\n" +
-                        "- Amateur: 20-40 reps in one minute\n" +
-                        "- Advanced: 40+ reps in one minute",
-                    "running" =>
-                        "To provide the best training plan, please tell me your current level:\n" +
-                        "- Beginner: 2.4km in 14 minutes or more\n" +
-                        "- Amateur: 13:59 to 11:00\n" +
-                        "- Advanced: 10:59 or faster",
-                    _ =>
-                        $"To provide the best training plan for your {prevField}, please tell me your level:\n- Beginner\n- Amateur\n- Advanced"
-                };
+            // else
+            // {
+            //     // Generic training plan prompt
+            //     string levelPrompt = prevField switch
+            //     {
+            //         "push-up" or "sit-up" =>
+            //             "To provide the best training plan, please tell me your current level:\n" +
+            //             "- Beginner: 0-20 reps in one minute\n" +
+            //             "- Amateur: 20-40 reps in one minute\n" +
+            //             "- Advanced: 40+ reps in one minute",
+            //         "running" =>
+            //             "To provide the best training plan, please tell me your current level:\n" +
+            //             "- Beginner: 2.4km in 14 minutes or more\n" +
+            //             "- Amateur: 13:59 to 11:00\n" +
+            //             "- Advanced: 10:59 or faster",
+            //         _ =>
+            //             $"To provide the best training plan for your {prevField}, please tell me your level:\n- Beginner\n- Amateur\n- Advanced"
+            //     };
 
-                return Ok(new ChatResponse { Response = levelPrompt });
-            }
+            //     return Ok(new ChatResponse { Response = levelPrompt });
+            // }
         }
 
         if (!string.IsNullOrEmpty(intent.QuestionType))
@@ -228,6 +277,24 @@ public class ChatController : ControllerBase
         });
     }
 
+    private IActionResult? CheckRetries(string key, string cancelMessage)
+    {
+        // read → increment → store
+        int retries = int.TryParse(HttpContext.Session.GetString(key), out var r) ? r : 0;
+        retries++;
+        HttpContext.Session.SetString(key, retries.ToString());
+
+        if (retries >= 5)
+        {
+            ClearIpptSession();          
+            return Ok(new ChatResponse  
+            {
+                Response = cancelMessage
+            });
+        }
+        return null;           
+    }
+
     private IActionResult HandleIpptFlow(string message)
     {
         var gender = HttpContext.Session.GetString(SessionIpptGenderKey);
@@ -235,6 +302,18 @@ public class ChatController : ControllerBase
         var pushups = HttpContext.Session.GetString(SessionIpptPushupsKey);
         var situps = HttpContext.Session.GetString(SessionIpptSitupsKey);
         var runtime = HttpContext.Session.GetString(SessionIpptRuntimeKey);
+
+        if (Regex.IsMatch(message, @"\b(bye|good\s?bye|good‑bye|see\s+you|exit)\b",
+                        RegexOptions.IgnoreCase))
+        {
+            ClearSession();
+            ClearIpptSession();
+            return Ok(new ChatResponse
+            {
+                Response = "Good‑bye 👋 Stay active and take care!",
+                EndChat = true
+            });
+        }
 
         if (string.IsNullOrEmpty(gender))
         {
@@ -251,7 +330,14 @@ public class ChatController : ControllerBase
             }
             else
             {
-                return Ok(new ChatResponse { Response = "Invalid gender. Please specify 'male' or 'female' (or 'm'/'f')." });
+                var cancel = CheckRetries("IpptGenderRetries",
+                        "Too many invalid attempts. IPPT check cancelled. Please start over.");
+                if (cancel != null) return cancel;
+
+                return Ok(new ChatResponse
+                {
+                    Response = "Invalid gender. Please specify 'male' or 'female' (or 'm'/'f')."
+                });
             }
         }
 
@@ -264,7 +350,14 @@ public class ChatController : ControllerBase
             }
             else
             {
-                return Ok(new ChatResponse { Response = "Invalid age. Please enter a number (e.g., 25)." });
+                var cancel = CheckRetries("IpptAgeRetries",
+                        "Too many invalid attempts. IPPT check cancelled. Please start over.");
+                if (cancel != null) return cancel;
+
+                return Ok(new ChatResponse
+                {
+                    Response = "Invalid age. Please enter a number (e.g., 25)."
+                });
             }
         }
 
@@ -277,7 +370,14 @@ public class ChatController : ControllerBase
             }
             else
             {
-                return Ok(new ChatResponse { Response = "Invalid input. Please enter the number of push-ups as a whole number." });
+                var cancel = CheckRetries("IpptPushupRetries",
+                        "Too many invalid attempts. IPPT check cancelled. Please start over.");
+                if (cancel != null) return cancel;
+
+                return Ok(new ChatResponse
+                {
+                    Response = "Invalid input. Please enter the number of push-ups as a whole number."
+                });
             }
         }
 
@@ -290,7 +390,14 @@ public class ChatController : ControllerBase
             }
             else
             {
-                return Ok(new ChatResponse { Response = "Invalid input. Please enter the number of sit-ups as a whole number." });
+                var cancel = CheckRetries("IpptSitupRetries",
+                        "Too many invalid attempts. IPPT check cancelled. Please start over.");
+                if (cancel != null) return cancel;
+
+                return Ok(new ChatResponse
+                {
+                    Response = "Invalid input. Please enter the number of sit-ups as a whole number."
+                });
             }
         }
 
@@ -351,38 +458,233 @@ public class ChatController : ControllerBase
         };
     }
 
-private bool IsIPPTCheckRequest(string message)
-{
-    if (string.IsNullOrEmpty(message)) return false;
-
-    // Quick checks for common phrasing
-    if (message.Contains("ippt check", StringComparison.OrdinalIgnoreCase) ||
-        message.Contains("check ippt", StringComparison.OrdinalIgnoreCase) ||
-        (message.Contains("ippt", StringComparison.OrdinalIgnoreCase) &&
-        message.Contains("result", StringComparison.OrdinalIgnoreCase)))
+    private bool IsIPPTCheckRequest(string message)
     {
-        return true;
+        if (string.IsNullOrEmpty(message)) return false;
+
+        // Quick checks for common phrasing
+        if (message.Contains("ippt check", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("check ippt", StringComparison.OrdinalIgnoreCase) ||
+            (message.Contains("ippt", StringComparison.OrdinalIgnoreCase) &&
+            message.Contains("result", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        // General regex to match any keywords like ippt, score, result, performance
+        return Regex.IsMatch(message, @"\b(check|score|result|performance)\b", RegexOptions.IgnoreCase);
     }
 
-    // General regex to match any keywords like ippt, score, result, performance
-    return Regex.IsMatch(message, @"\b(ippt|score|result|performance)\b", RegexOptions.IgnoreCase);
-}
+    private IActionResult HandleIpptReverseFlow(string message)
+    {
+        var session = HttpContext.Session;
+
+        // Step 1: Gender
+        string? gender = session.GetString(SessionGenderKey);
+        if (string.IsNullOrEmpty(gender))
+        {
+            if (Regex.IsMatch(message, @"^(m|male|f|female)$", RegexOptions.IgnoreCase))
+            {
+                gender = message.ToLower().StartsWith("m") ? "male" : "female";
+                session.SetString(SessionGenderKey, gender);
+                return Ok(new ChatResponse { Response = "Enter your age (e.g., 25)." });
+            }
+            return Ok(new ChatResponse { Response = "Please enter your gender as 'male' or 'female' (m/f)." });
+        }
+
+        // Step 2: Age
+        string? ageStr = session.GetString(SessionAgeKey);
+        if (string.IsNullOrEmpty(ageStr))
+        {
+            if (int.TryParse(message, out int age) && age >= 18 && age <= 45)
+            {
+                session.SetString(SessionAgeKey, age.ToString());
+                session.SetString("ask_pushup", "true");
+                return Ok(new ChatResponse { Response = "Do you know your push-up count? (yes/no)" });
+            }
+            return Ok(new ChatResponse { Response = "Please enter a valid age between 18 and 45." });
+        }
+
+        // Auto-trigger when 2 stations are known
+        int known = 0;
+        if (!string.IsNullOrEmpty(session.GetString("pushup"))) known++;
+        if (!string.IsNullOrEmpty(session.GetString("situp"))) known++;
+        if (!string.IsNullOrEmpty(session.GetString("runtime"))) known++;
+
+        if (known >= 2)
+        {
+            return ProceedToReverseScore();
+        }
+
+        // Step 3: Push-up
+        string? askPush = session.GetString("ask_pushup");
+        if (askPush == "true")
+        {
+            if (Regex.IsMatch(message, @"^(yes|y)$", RegexOptions.IgnoreCase))
+            {
+                session.SetString("ask_pushup", "awaiting");
+                return Ok(new ChatResponse { Response = "Enter your push-up count:" });
+            }
+            else if (Regex.IsMatch(message, @"^(no|n)$", RegexOptions.IgnoreCase))
+            {
+                session.SetString("pushup", "");
+                session.SetString("ask_pushup", "done");
+                session.SetString("ask_situp", "true");
+                return Ok(new ChatResponse { Response = "Do you know your sit-up count? (yes/no)" });
+            }
+            return Ok(new ChatResponse { Response = "Please reply with 'yes' or 'no'." });
+        }
+        else if (askPush == "awaiting")
+        {
+            if (int.TryParse(message, out int pushVal) && pushVal >= 0)
+            {
+                session.SetString("pushup", pushVal.ToString());
+                session.SetString("ask_pushup", "done");
+                session.SetString("ask_situp", "true");
+                return Ok(new ChatResponse { Response = "Do you know your sit-up count? (yes/no)" });
+            }
+            return Ok(new ChatResponse { Response = "Please enter a valid number for push-ups." });
+        }
+
+        // Step 4: Sit-up
+        string? askSit = session.GetString("ask_situp");
+        if (askSit == "true")
+        {
+            if (Regex.IsMatch(message, @"^(yes|y)$", RegexOptions.IgnoreCase))
+            {
+                session.SetString("ask_situp", "awaiting");
+                return Ok(new ChatResponse { Response = "Enter your sit-up count:" });
+            }
+            else if (Regex.IsMatch(message, @"^(no|n)$", RegexOptions.IgnoreCase))
+            {
+                session.SetString("situp", "");
+                session.SetString("ask_situp", "done");
+                session.SetString("ask_run", "true");
+                return Ok(new ChatResponse { Response = "Do you know your 2.4km run time? (yes/no)" });
+            }
+            return Ok(new ChatResponse { Response = "Please reply with 'yes' or 'no'." });
+        }
+        else if (askSit == "awaiting")
+        {
+            if (int.TryParse(message, out int sitVal) && sitVal >= 0)
+            {
+                session.SetString("situp", sitVal.ToString());
+                session.SetString("ask_situp", "done");
+                session.SetString("ask_run", "true");
+                return Ok(new ChatResponse { Response = "Do you know your 2.4km run time? (yes/no)" });
+            }
+            return Ok(new ChatResponse { Response = "Please enter a valid number for sit-ups." });
+        }
+
+        // Step 5: Run
+        string? askRun = session.GetString("ask_run");
+        if (askRun == "true")
+        {
+            if (Regex.IsMatch(message, @"^(yes|y)$", RegexOptions.IgnoreCase))
+            {
+                session.SetString("ask_run", "awaiting");
+                return Ok(new ChatResponse { Response = "Enter your run time (e.g., 11:30):" });
+            }
+            else if (Regex.IsMatch(message, @"^(no|n)$", RegexOptions.IgnoreCase))
+            {
+                session.SetString("runtime", "");
+                session.SetString("ask_run", "done");
+                return ProceedToReverseScore();
+            }
+            return Ok(new ChatResponse { Response = "Please reply with 'yes' or 'no'." });
+        }
+        else if (askRun == "awaiting")
+        {
+            if (Regex.IsMatch(message, @"^\d{1,2}:\d{2}$"))
+            {
+                session.SetString("runtime", message);
+                session.SetString("ask_run", "done");
+                return ProceedToReverseScore();
+            }
+            return Ok(new ChatResponse { Response = "Please enter time in MM:SS format (e.g., 11:30)." });
+        }        
+
+        return Ok(new ChatResponse { Response = "Thanks! Let me know the last station if you know it, or reply 'no' to proceed." });
+    }
+
+    private IActionResult ProceedToReverseScore()
+    {
+        var session = HttpContext.Session;
+
+        string gender = session.GetString(SessionGenderKey) ?? "";
+        int age = int.Parse(session.GetString(SessionAgeKey) ?? "0");
+
+        string? pushupStr = session.GetString("pushup");
+        string? situpStr = session.GetString("situp");
+        string? runtimeStr = session.GetString("runtime");
+
+        int? pushups = int.TryParse(pushupStr, out int p) ? p : null;
+        int? situps = int.TryParse(situpStr, out int s) ? s : null;
+        string runtime = !string.IsNullOrEmpty(runtimeStr) ? runtimeStr : null;
+
+        string target = session.GetString(SessionIpptTargetKey) ?? "pass";
+
+        string result = AnswerRepository.CalculateRequiredForTarget(
+            gender,
+            age,
+            target,
+            pushups,
+            situps,
+            runtime
+        );
+
+        ClearIpptSession(); 
+
+        return Ok(new ChatResponse { Response = result });
+    }
+
+    // private int? TryExtractNumber(string input, string keyword)
+    // {
+    //     var pattern = $@"(\d+)\s*{keyword}";
+    //     var match = Regex.Match(input.ToLower(), pattern);
+    //     return match.Success ? int.Parse(match.Groups[1].Value) : (int?)null;
+    // }
+
+    // private string TryExtractRuntime(string input)
+    // {
+    //     var match = Regex.Match(input, @"\b(\d{1,2}:\d{2})\b");
+    //     return match.Success ? match.Groups[1].Value : null;
+    // }
+
 
     private void ClearSession()
     {
-        HttpContext.Session.Remove(SessionFieldKey);
-        HttpContext.Session.Remove(SessionLevelKey);
+        HttpContext.Session.Clear();
+        // HttpContext.Session.Remove(SessionFieldKey);
+        // HttpContext.Session.Remove(SessionLevelKey);
     }
 
     private void ClearIpptSession()
     {
+        // Standard IPPT flow keys
         HttpContext.Session.Remove(SessionIpptFlowKey);
         HttpContext.Session.Remove(SessionIpptGenderKey);
         HttpContext.Session.Remove(SessionIpptAgeKey);
         HttpContext.Session.Remove(SessionIpptPushupsKey);
         HttpContext.Session.Remove(SessionIpptSitupsKey);
         HttpContext.Session.Remove(SessionIpptRuntimeKey);
+
+        // Retry keys
         HttpContext.Session.Remove("IpptRuntimeRetries");
+        HttpContext.Session.Remove("IpptGenderRetries");
+        HttpContext.Session.Remove("IpptAgeRetries");
+        HttpContext.Session.Remove("IpptPushupRetries");
+        HttpContext.Session.Remove("IpptSitupRetries");
+
+        // Reverse flow keys
+        HttpContext.Session.Remove(SessionIpptReverseFlowKey);
+        HttpContext.Session.Remove(SessionIpptTargetKey);
+        HttpContext.Session.Remove("pushup");
+        HttpContext.Session.Remove("situp");
+        HttpContext.Session.Remove("runtime");
+        HttpContext.Session.Remove("ask_pushup");
+        HttpContext.Session.Remove("ask_situp");
+        HttpContext.Session.Remove("ask_run");
     }
 
     private bool HasNegativeIntent(string message) =>

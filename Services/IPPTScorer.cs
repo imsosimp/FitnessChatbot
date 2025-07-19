@@ -282,7 +282,7 @@ public static class IPPTScorer
             {
                 if (totalSeconds <= MaleTimeThresholdsSeconds[i])
                 {
-                    int index = i == 0 ? 0 : i - 1;
+                    int index = i == 0 ? 0 : i + 1;
                     int score = MaleRunScoreTable[ageIndex][index-1];
                     Console.WriteLine($"[Run] Gender: Male, AgeGroup: {ageGroup}, RunTime: {runTime} => Time(sec): {totalSeconds}, ThresholdIndex: {index}, Score: {score}");
                     return score;
@@ -296,7 +296,7 @@ public static class IPPTScorer
             {
                 if (totalSeconds <= FemaleTimeThresholdsSeconds[i])
                 {
-                    int index = i == 0 ? 0 : i - 1;
+                    int index = i == 0 ? 0 : i + 1;
                     int score = FemaleRunScoreTable[ageIndex][index-1];
                     Console.WriteLine($"[Run] Gender: Female, AgeGroup: {ageGroup}, RunTime: {runTime} => Time(sec): {totalSeconds}, ThresholdIndex: {index}, Score: {score}");
                     return score;

@@ -28,3 +28,4 @@ C:\Users\user\Documents\FitnessChatbot\obj\Debug\net8.0\refint\FitnessChatbot.dl
 C:\Users\user\Documents\FitnessChatbot\obj\Debug\net8.0\FitnessChatbot.pdb
 C:\Users\user\Documents\FitnessChatbot\obj\Debug\net8.0\FitnessChatbot.genruntimeconfig.cache
 C:\Users\user\Documents\FitnessChatbot\obj\Debug\net8.0\ref\FitnessChatbot.dll
+C:\Users\user\Documents\FitnessChatbot\obj\Debug\net8.0\FitnessChatbot.sourcelink.json

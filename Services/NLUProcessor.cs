@@ -20,7 +20,7 @@ public class NLUProcessor
         {"train", "bodypart"}, {"target", "bodypart"},        
 
         // IPPT
-        {"ippt", "ippt"}
+        // {"ippt", "ippt"}
     };
 
     private readonly Dictionary<string, string> LevelKeywords = new()
@@ -40,7 +40,7 @@ public class NLUProcessor
         {"important", "why"},
         // Tips
         {"tip", "tips"}, {"tips", "tips"}, {"advice", "tips"},
-        
+
     };
 
     private readonly Dictionary<string, string> GenderKeywords = new()
@@ -68,28 +68,6 @@ public class NLUProcessor
         return null;
     }
 
-    public string DetectIntent(string message)
-    {
-        message = message.ToLower();
-
-        // IPPT intent detection
-        if (Regex.IsMatch(message, @"\b(ippt|score|result|performance)\b"))
-        {
-            return "IPPT_CHECK";
-        }
-
-        // Fallback: check question intents
-        string questionType = DetectQuestionIntent(message);
-        if (questionType != null)
-        {
-            return "QUESTION";
-        }
-
-        // Unknown if nothing else matched
-        return "UNKNOWN";
-
-    }
-
     public string DetectGender(string message)
     {
         foreach (var pair in GenderKeywords)
@@ -103,6 +81,49 @@ public class NLUProcessor
         return null;
     }
 
+    public string DetectIntent(string message)
+    {
+        message = message.ToLower();
+
+        // IPPT intent detection
+        // if (Regex.IsMatch(message, @"\b(check|score|result|performance)\b"))
+        // {
+        //     return "IPPT_CHECK";
+        // }
+        if (Regex.IsMatch(message, @"\bippt\b") &&
+            Regex.IsMatch(message, @"\b(check|score|result|performance)\b"))
+        {
+            return "IPPT_CHECK";
+        }
+
+        // Fallback: check question intents
+        string questionType = DetectQuestionIntent(message);
+        if (questionType != null)
+        {
+            return "QUESTION";
+        }
+
+        // Unknown if nothing else matched
+        return "UNKNOWN";
+    }
+
+    public bool IsReverseIpptQuery(string message)
+    {   
+        Console.WriteLine("[NLU] Checking for reverse IPPT query: " + message);
+        message = message.ToLower();
+        return Regex.IsMatch(message, @"\b(pass|silver|gold)\b") &&
+               Regex.IsMatch(message, @"\bippt\b")||
+                message.Contains("ippt", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // public bool IsReverseIpptQuery(string message)
+    // {
+    //     Console.WriteLine("[NLU] Checking for reverse IPPT query: " + message);
+    //     return Regex.IsMatch(message, @"\b(need|get|required|how many|how much|how fast|to get|to score|to obtain)\b", RegexOptions.IgnoreCase) &&
+    //            Regex.IsMatch(message, @"\b(pass|silver|gold)\b", RegexOptions.IgnoreCase) ||
+    //            message.Contains("ippt", StringComparison.OrdinalIgnoreCase);
+    // }
+
     public IntentResult Classify(string message)
     {
         message = message.ToLower();
@@ -111,7 +132,7 @@ public class NLUProcessor
         string level = DetectLevel(message);
         string questionType = DetectQuestionIntent(message);
         string gender = DetectGender(message);
-        string MiscIntent = DetectMiscIntent(message); 
+        string MiscIntent = DetectMiscIntent(message);
 
         return new IntentResult
         {
@@ -119,48 +140,48 @@ public class NLUProcessor
             Level = DetectLevel(message),
             QuestionType = DetectQuestionIntent(message),
             Gender = DetectGender(message),
-            MiscIntent = DetectMiscIntent(message) 
+            MiscIntent = DetectMiscIntent(message)
         };
     }
 
     public string DetectField(string message)
-{
-    message = message.ToLower();
-
-    // First: exact keyword matches (your existing dictionary)
-    foreach (var pair in FieldKeywords)
     {
-        var regex = new Regex($@"\b{Regex.Escape(pair.Key)}\b", RegexOptions.IgnoreCase);
-        if (regex.IsMatch(message))
+        message = message.ToLower();
+
+        // First: exact keyword matches (your existing dictionary)
+        foreach (var pair in FieldKeywords)
         {
-            Console.WriteLine($"[NLU] Matched dictionary keyword: '{pair.Key}' → Field: '{pair.Value}'");
-            return pair.Value;
+            var regex = new Regex($@"\b{Regex.Escape(pair.Key)}\b", RegexOptions.IgnoreCase);
+            if (regex.IsMatch(message))
+            {
+                Console.WriteLine($"[NLU] Matched dictionary keyword: '{pair.Key}' → Field: '{pair.Value}'");
+                return pair.Value;
+            }
         }
-    }
 
-    // Fallback regex for push-up variations
-    if (Regex.IsMatch(message, @"\bpush[\s\-]?ups?\b", RegexOptions.IgnoreCase))
-    {
-        Console.WriteLine("[NLU] Matched fallback regex: push-up");
-        return "push-up";
-    }
+        // Fallback regex for push-up variations
+        if (Regex.IsMatch(message, @"\bpush[\s\-]?ups?\b", RegexOptions.IgnoreCase))
+        {
+            Console.WriteLine("[NLU] Matched fallback regex: push-up");
+            return "push-up";
+        }
 
-    // Fallback regex for sit-up variations
-    if (Regex.IsMatch(message, @"\bsit[\s\-]?ups?\b", RegexOptions.IgnoreCase))
-    {
-        Console.WriteLine("[NLU] Matched fallback regex: sit-up");
-        return "sit-up";
-    }
+        // Fallback regex for sit-up variations
+        if (Regex.IsMatch(message, @"\bsit[\s\-]?ups?\b", RegexOptions.IgnoreCase))
+        {
+            Console.WriteLine("[NLU] Matched fallback regex: sit-up");
+            return "sit-up";
+        }
 
-    // Fallback regex for running variations
-    if (Regex.IsMatch(message, @"\b(run|running|jog|2\.4|runtime)\b", RegexOptions.IgnoreCase))
-    {
-        Console.WriteLine("[NLU] Matched fallback regex: running");
-        return "running";
-    }
+        // Fallback regex for running variations
+        if (Regex.IsMatch(message, @"\b(run|running|jog|2\.4|runtime)\b", RegexOptions.IgnoreCase))
+        {
+            Console.WriteLine("[NLU] Matched fallback regex: running");
+            return "running";
+        }
 
-    return null;
-}
+        return null;
+    }
 
     public string DetectLevel(string message)
     {
@@ -213,8 +234,7 @@ public class NLUProcessor
             return "running";
 
         return null;
-    }
-
+    }    
 }
 
 public class IntentResult

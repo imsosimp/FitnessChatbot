@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 
+
 public class AnswerRepository
 {
     private readonly Dictionary<(string field, string level), string> answers = new()
@@ -34,7 +35,7 @@ public class AnswerRepository
         { ("general", "tips"), @"I can help with training plans! Please share your current level: For Push-Ups & Sit-Ups - Beginner (0-20 reps), Amateur (20-40 reps), Advanced (40+ reps). For Running 2.4km - Beginner (14+ min), Amateur (11-13:59), Advanced (<11:00). Let me know so I can tailor your program!" },
 
         // NEW: Muscle groups targeted
-        { ("push-up", "muscle"), 
+        { ("push-up", "muscle"),
             @"Push-Up – Targeted Body Parts
             - Primary: Chest (pectoralis major), triceps, front shoulders (anterior deltoids).
             - Secondary: Core muscles (abs, obliques) for stabilization, and serratus anterior." },
@@ -67,13 +68,13 @@ public class AnswerRepository
 
         if (answer == null) return null;
 
-// (?<=\s|^): A lookbehind assertion that checks if the match is preceded by either:
-// \s – a whitespace character (space, tab, etc.)
-// ^ – the start of the string
-// (\d+\.): Matches one or more digits (\d+) followed by a literal dot (.). This part is captured for replacement.
-// "\n$1": Replaces the matched number-dot combo by inserting a newline before it.//
-// $1 refers to the captured group (\d+\.), i.e., the actual numbered item.//
-        answer = Regex.Replace(answer, @"(?<=\s|^)(\d+\.)", "\n$1");
+        // (?<=\s|^): A lookbehind assertion that checks if the match is preceded by either:
+        // \s – a whitespace character (space, tab, etc.)
+        // ^ – the start of the string
+        // (\d+\.): Matches one or more digits (\d+) followed by a literal dot (.). This part is captured for replacement.
+        // "\n$1": Replaces the matched number-dot combo by inserting a newline before it.//
+        // $1 refers to the captured group (\d+\.), i.e., the actual numbered item.//
+        answer = Regex.Replace(answer, @"(?<=\s|^)(\d+\.)\s", "\n$1");
 
         return answer.Trim();
     }
@@ -118,6 +119,7 @@ public class AnswerRepository
 
     private static string ComputeIPPTScore(string gender, int ageGroup, int sitUps, int pushUps, string runTime)
     {
+
         int sitScore = IPPTScorer.GetSitUpScore(gender, sitUps, ageGroup);
         int pushScore = IPPTScorer.GetPushUpScore(gender, pushUps, ageGroup);
         int runScore = IPPTScorer.GetRunScore(gender, runTime, ageGroup);
@@ -131,5 +133,107 @@ public class AnswerRepository
         else result = $"😔 You scored {total} — Not a pass. Keep training!";
 
         return $"Sit-up score: {sitScore}, Push-up score: {pushScore}, Run score: {runScore} → Total: {total}. {result}";
+    }
+
+    public static string CalculateRequiredForTarget(string gender, int age, string target,
+    int? pushups, int? situps, string runtime)
+    {
+        int ageGroup = DetermineAgeCategory(age);
+        if (ageGroup == -1)
+            return "⚠️ Invalid age for IPPT categories.";
+
+        int? scorePush = pushups.HasValue ? IPPTScorer.GetPushUpScore(gender, pushups.Value, ageGroup) : null;
+        int? scoreSit = situps.HasValue ? IPPTScorer.GetSitUpScore(gender, situps.Value, ageGroup) : null;
+        int? scoreRun = !string.IsNullOrEmpty(runtime) ? IPPTScorer.GetRunScore(gender, runtime, ageGroup) : null;
+
+        Console.WriteLine($"[DEBUG] Age: {age}, Age Group: {ageGroup}");
+        Console.WriteLine($"[DEBUG] Push-Up Score: {scorePush}");
+        Console.WriteLine($"[DEBUG] Sit-Up Score: {scoreSit}");
+        Console.WriteLine($"[DEBUG] Run Score: {scoreRun}");
+
+        var stationScores = new Dictionary<string, int?>()
+        {
+            { "push-up", scorePush },
+            { "sit-up", scoreSit },
+            { "runtime", scoreRun }
+        };
+
+        var known = stationScores.Where(kv => kv.Value.HasValue).ToDictionary(kv => kv.Key, kv => kv.Value.Value);
+        var unknown = stationScores.FirstOrDefault(kv => !kv.Value.HasValue).Key;
+
+        if (unknown == null)
+            return " All station scores are already provided. No need for reverse calculation.";
+
+        int requiredTotal = target.ToLower() switch
+        {
+            "gold" => 85,
+            "silver" => 75,
+            _ => 61 // pass
+        };
+
+        int minPerStation = target.ToLower() switch
+        {
+            "gold" => 21,
+            "silver" => 15,
+            _ => 1
+        };
+
+        int currentTotal = known.Values.Sum();
+        int needed = requiredTotal - currentTotal;
+
+        // Cap needed to max 25 and min required
+        if (needed > 25)
+        {
+            return $"❌ Based on your current scores, reaching {target.ToUpper()} is not possible.\n" +
+                   $"You need {needed} points in '{unknown}', but max per station is 25.";
+        }
+
+        if (needed < minPerStation) needed = minPerStation;
+
+        string suggestion = unknown switch
+        {
+            "push-up" => $"🏋️ You need at least {needed} points for Push-Ups → estimated {ReversePushUpScore(gender, age, needed)} reps.",
+            "sit-up" => $"🧍‍♂️ You need at least {needed} points for Sit-Ups → estimated {ReverseSitUpScore(gender, age, needed)} reps.",
+            "runtime" => $"🏃 You need at least {needed} points for the 2.4km run → approximately {ReverseRunScore(gender, age, needed)} minutes.",
+            _ => "⚠️ Unknown station type."
+        };
+
+        return $"🎯 To reach {target.ToUpper()}:\n" +
+               $"• Known: {string.Join(", ", known.Select(kv => $"{kv.Key}: {kv.Value} pts"))}\n" +
+               $"• Required in '{unknown}': {needed} pts\n\n{suggestion}";
+    }
+
+    public static int ReversePushUpScore(string gender, int ageGroup, int targetScore)
+    {
+        for (int reps = 0; reps <= 80; reps++)
+        {
+            if (IPPTScorer.GetPushUpScore(gender, reps, ageGroup) >= targetScore)
+                return reps;
+        }
+        return -1;
+    }
+
+    public static int ReverseSitUpScore(string gender, int ageGroup, int targetScore)
+    {
+        for (int reps = 0; reps <= 80; reps++)
+        {
+            if (IPPTScorer.GetSitUpScore(gender, reps, ageGroup) >= targetScore)
+                return reps;
+        }
+        return -1;
+    }
+
+    public static string ReverseRunScore(string gender, int ageGroup, int targetScore)
+    {
+        for (int min = 6; min <= 20; min++)
+        {
+            for (int sec = 0; sec < 60; sec++)
+            {
+                string runtime = $"{min}:{sec:D2}";
+                if (IPPTScorer.GetRunScore(gender, runtime, ageGroup) >= targetScore)
+                    return runtime;
+            }
+        }
+        return "unreachable";
     }
 }
