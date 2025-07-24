@@ -185,12 +185,13 @@ public class NLUProcessor
         message = message.ToLower();
 
         bool hasResultKeyword = Regex.IsMatch(message, @"\b(pass|silver|gold)\b");
-        bool hasIpptKeyword = Regex.IsMatch(message, @"\bippt\b");
+        // bool hasIpptKeyword = Regex.IsMatch(message, @"\bippt\b");
 
         if (hasResultKeyword) Console.WriteLine("[NLU] Matched reverse keyword: pass/silver/gold");
-        if (hasIpptKeyword) Console.WriteLine("[NLU] Matched keyword: ippt");
+        // if (hasIpptKeyword) Console.WriteLine("[NLU] Matched keyword: ippt");
 
-        bool isMatch = hasResultKeyword || hasIpptKeyword;
+        // bool isMatch = hasResultKeyword || hasIpptKeyword;
+        bool isMatch = hasResultKeyword;
 
         if (isMatch) Console.WriteLine("[NLU] Reverse IPPT query detected by IsReverseIpptQuery");
 
@@ -305,4 +306,5 @@ public class IntentResult
     public string QuestionType { get; set; }
     public string Gender { get; set; }
     public string MiscIntent { get; set; }
+    
 }

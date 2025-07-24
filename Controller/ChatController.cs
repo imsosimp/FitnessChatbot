@@ -37,20 +37,32 @@ public class ChatController : ControllerBase
         _nlu = nlu;
         _repo = repo;
     }
-    
+
     [HttpPost]
     public IActionResult Post([FromBody] ChatRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request?.Message))
+        if (string.IsNullOrWhiteSpace(request?.Message)) 
             return Respond("Sorry, I couldn't understand your question.");
 
         string message = request.Message.ToLower().Trim();
         Console.WriteLine("[BOT] User Message: " + message);
 
+        if (string.IsNullOrWhiteSpace(request?.Message)) 
+            return Respond("Sorry, I couldn't understand your question.");
+
         var intent = _nlu.Classify(message);
 
+        if (intent.MiscIntent is "farewell" || IsGoodbye(message))
+        {
+            HttpContext.Session.Clear(); // Optional: clear any session data
+            return HandleFarewell();
+        }
+
+        if (intent.MiscIntent is "greeting" or "thanks")
+            return HandleGeneralIntent(intent, message);
+
         if (HttpContext.Session.GetString(SessionIpptFlowKey) == "true")
-            return HandleIpptCheckFlow(intent);
+            return HandleIpptCheckFlow(intent, message);
 
         if (HttpContext.Session.GetString(SessionIpptReverseFlowKey) == "true")
             return HandleReverseIpptFlow(message);
@@ -66,10 +78,6 @@ public class ChatController : ControllerBase
             return StartReverseFlow(message);
         }
         
-        if (intent.MiscIntent is "greeting" or "thanks" or "farewell")
-            return HandleGeneralIntent(intent, message);
-    
-        if (IsGoodbye(message)) return HandleFarewell();
         if (IsWhatOrWhyIppt(message)) return HandleWhatWhyIppt(message);
 
         if (IsRequestingIpptTips(message))
@@ -127,9 +135,9 @@ public class ChatController : ControllerBase
         return HandleIpptReverseFlow(message);
     }
 
-    private IActionResult HandleIpptCheckFlow(IntentResult intent)
+    private IActionResult HandleIpptCheckFlow(IntentResult intent, string message)
     {
-        return HandleIpptFlow(intent.QuestionType);
+        return HandleIpptFlow(message);
     }
 
     private IActionResult HandleGeneralIntent(IntentResult intent, string message)
@@ -769,6 +777,8 @@ public class ChatController : ControllerBase
 
         if (known >= 2)
         {
+            // ClearReverseFlowSession();
+            LogReverseScoreDebug(session);
             return ProceedToReverseScore();
         }
 
@@ -786,6 +796,14 @@ public class ChatController : ControllerBase
                 session.SetString("pushup", "");
                 session.SetString("ask_pushup", "done");
                 session.SetString("ask_situp", "true");
+
+                if (CountKnownStations(session) >= 2)
+                {
+                    // ClearReverseFlowSession();
+                    LogReverseScoreDebug(session);
+                    return ProceedToReverseScore();
+                }
+
                 return Ok(new ChatResponse { Response = "Do you know your sit-up count? (yes/no)" });
             }
             return Ok(new ChatResponse { Response = "Please reply with 'yes' or 'no'." });
@@ -797,6 +815,14 @@ public class ChatController : ControllerBase
                 session.SetString("pushup", pushVal.ToString());
                 session.SetString("ask_pushup", "done");
                 session.SetString("ask_situp", "true");
+
+                if (CountKnownStations(session) >= 2)
+                {
+                    // ClearReverseFlowSession();
+                    LogReverseScoreDebug(session);
+                    return ProceedToReverseScore();
+                }
+
                 return Ok(new ChatResponse { Response = "Do you know your sit-up count? (yes/no)" });
             }
             return Ok(new ChatResponse { Response = "Please enter a valid number for push-ups." });
@@ -816,6 +842,14 @@ public class ChatController : ControllerBase
                 session.SetString("situp", "");
                 session.SetString("ask_situp", "done");
                 session.SetString("ask_run", "true");
+
+                if (CountKnownStations(session) >= 2)
+                {
+                    // ClearReverseFlowSession();
+                    LogReverseScoreDebug(session);
+                    return ProceedToReverseScore();
+                }
+
                 return Ok(new ChatResponse { Response = "Do you know your 2.4km run time? (yes/no)" });
             }
             return Ok(new ChatResponse { Response = "Please reply with 'yes' or 'no'." });
@@ -827,6 +861,14 @@ public class ChatController : ControllerBase
                 session.SetString("situp", sitVal.ToString());
                 session.SetString("ask_situp", "done");
                 session.SetString("ask_run", "true");
+
+                if (CountKnownStations(session) >= 2)
+                {
+                    // ClearReverseFlowSession();
+                    LogReverseScoreDebug(session);
+                    return ProceedToReverseScore();
+                }
+
                 return Ok(new ChatResponse { Response = "Do you know your 2.4km run time? (yes/no)" });
             }
             return Ok(new ChatResponse { Response = "Please enter a valid number for sit-ups." });
@@ -845,7 +887,14 @@ public class ChatController : ControllerBase
             {
                 session.SetString("runtime", "");
                 session.SetString("ask_run", "done");
-                return ProceedToReverseScore();
+
+                if (CountKnownStations(session) >= 2)
+                {
+                    // ClearReverseFlowSession();
+                    LogReverseScoreDebug(session);
+                    return ProceedToReverseScore();
+                }
+
             }
             return Ok(new ChatResponse { Response = "Please reply with 'yes' or 'no'." });
         }
@@ -855,13 +904,104 @@ public class ChatController : ControllerBase
             {
                 session.SetString("runtime", message);
                 session.SetString("ask_run", "done");
-                return ProceedToReverseScore();
+
+                if (CountKnownStations(session) >= 2)
+                {
+                    // ClearReverseFlowSession();
+                    LogReverseScoreDebug(session);
+                    return ProceedToReverseScore();
+                }
+                
             }
             return Ok(new ChatResponse { Response = "Please enter time in MM:SS format (e.g., 11:30)." });
         }
 
         return Ok(new ChatResponse { Response = "Thanks! Let me know the last station if you know it, or reply 'no' to proceed." });
     }
+
+    private void LogReverseScoreDebug(ISession session)
+    {
+        string? gender = session.GetString(SessionGenderKey);
+        string? ageStr = session.GetString(SessionAgeKey);
+        string? pushupStr = session.GetString("pushup");
+        string? situpStr = session.GetString("situp");
+        string? runtimeStr = session.GetString("runtime");
+
+        Console.WriteLine("[DEBUG] Preparing for reverse scoring...");
+        Console.WriteLine($"[DEBUG] Gender: {gender}, Age: {ageStr}");
+        Console.WriteLine($"[DEBUG] Push-Ups: {pushupStr}, Sit-Ups: {situpStr}, Runtime: {runtimeStr}");
+    }
+
+    private int CountKnownStations(ISession session)
+    {
+        string? pushup = session.GetString("pushup");
+        string? situp = session.GetString("situp");
+        string? runtime = session.GetString("runtime");
+
+        Console.WriteLine($"[DEBUG] pushup: {pushup}, situp: {situp}, runtime: {runtime}");
+
+        int known = 0;
+        if (!string.IsNullOrEmpty(session.GetString("pushup"))) known++;
+        if (!string.IsNullOrEmpty(session.GetString("situp"))) known++;
+        if (!string.IsNullOrEmpty(session.GetString("runtime"))) known++;
+
+        Console.WriteLine($"[DEBUG] Known stations count: {known}");
+
+        return known;
+    }
+
+    // private IActionResult ProceedToReverseScore()
+    // {
+    //     var session = HttpContext.Session;
+
+    //     string gender = session.GetString(SessionGenderKey) ?? "";
+    //     int age = int.Parse(session.GetString(SessionAgeKey) ?? "0");
+    //     int ageGroup = AnswerRepository.DetermineAgeCategory(age);
+
+    //     if (ageGroup < 1 || ageGroup > 9)
+    //     {
+    //         Console.WriteLine($"[ERROR] Invalid age group derived from age: {age}");
+    //         return Ok(new ChatResponse { Response = "Something went wrong while processing your age. Please re-enter your age (e.g., 25)." });
+    //     }
+
+    //     string? pushupStr = session.GetString("pushup");
+    //     string? situpStr = session.GetString("situp");
+    //     string? runtimeStr = session.GetString("runtime");
+
+    //     int? pushups = int.TryParse(pushupStr, out int p) ? p : null;
+    //     int? situps = int.TryParse(situpStr, out int s) ? s : null;
+    //     string? runtime = !string.IsNullOrEmpty(runtimeStr) ? runtimeStr : null;
+
+    //     string target = session.GetString(SessionIpptTargetKey) ?? "pass";
+    //     int targetScore = IPPTScorer.TargetToScore(target);
+
+    //     string result;
+
+    //     if (pushups == null)
+    //     {
+    //         int requiredPushups = AnswerRepository.ReversePushUpScore(gender, ageGroup, targetScore);
+    //         result = $"To achieve a {target.ToUpper()} for IPPT, you need to do at least {requiredPushups} push-ups.";
+    //     }
+    //     else if (situps == null)
+    //     {
+    //         int requiredSitups = AnswerRepository.ReverseSitUpScore(gender, ageGroup, targetScore);
+    //         result = $"To achieve a {target.ToUpper()} for IPPT, you need to do at least {requiredSitups} sit-ups.";
+    //     }
+    //     else if (runtime == null)
+    //     {
+    //         string requiredRuntime = AnswerRepository.ReverseRunScore(gender, ageGroup, targetScore);
+    //         result = requiredRuntime == "unreachable"
+    //             ? "Unfortunately, it's not possible to meet the target with the current push-up and sit-up scores."
+    //             : $"To achieve a {target.ToUpper()} for IPPT, you need to run 2.4km in {requiredRuntime} or faster.";
+    //     }
+    //     else
+    //     {
+    //         result = "You've already provided all 3 components. No reverse scoring needed.";
+    //     }
+
+    //     ClearIpptSession();
+    //     return Ok(new ChatResponse { Response = result });
+    // }
 
     private IActionResult ProceedToReverseScore()
     {
@@ -876,10 +1016,11 @@ public class ChatController : ControllerBase
 
         int? pushups = int.TryParse(pushupStr, out int p) ? p : null;
         int? situps = int.TryParse(situpStr, out int s) ? s : null;
-        string runtime = !string.IsNullOrEmpty(runtimeStr) ? runtimeStr : null;
+        string? runtime = !string.IsNullOrEmpty(runtimeStr) ? runtimeStr : null;
 
         string target = session.GetString(SessionIpptTargetKey) ?? "pass";
 
+        // Route everything through CalculateRequiredForTarget
         string result = AnswerRepository.CalculateRequiredForTarget(
             gender,
             age,
@@ -889,8 +1030,7 @@ public class ChatController : ControllerBase
             runtime
         );
 
-        ClearIpptSession(); 
-
+        ClearIpptSession();
         return Ok(new ChatResponse { Response = result });
     }
 
@@ -931,16 +1071,19 @@ public class ChatController : ControllerBase
         HttpContext.Session.Remove("IpptAgeRetries");
         HttpContext.Session.Remove("IpptPushupRetries");
         HttpContext.Session.Remove("IpptSitupRetries");
+    }
 
-        // Reverse flow keys
-        HttpContext.Session.Remove(SessionIpptReverseFlowKey);
-        HttpContext.Session.Remove(SessionIpptTargetKey);
-        HttpContext.Session.Remove("pushup");
-        HttpContext.Session.Remove("situp");
-        HttpContext.Session.Remove("runtime");
-        HttpContext.Session.Remove("ask_pushup");
-        HttpContext.Session.Remove("ask_situp");
-        HttpContext.Session.Remove("ask_run");
+    private void ClearReverseFlowSession()
+    {
+        var session = HttpContext.Session;
+        session.Remove(SessionGenderKey);
+        session.Remove(SessionAgeKey);
+        session.Remove("pushup");
+        session.Remove("situp");
+        session.Remove("runtime");
+        session.Remove("ask_pushup");
+        session.Remove("ask_situp");
+        session.Remove("ask_run");
     }
 
     private bool HasNegativeIntent(string message) =>

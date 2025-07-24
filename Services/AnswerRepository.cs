@@ -103,7 +103,7 @@ public class AnswerRepository
         return ComputeIPPTScore(genderNormalized, ageCat, situps, pushups, runtimeStr);
     }
 
-    private static int DetermineAgeCategory(int age)
+    public static int DetermineAgeCategory(int age)
     {
         if (age < 18 || age > 45) return -1;
         if (age < 22) return 1;
@@ -181,30 +181,43 @@ public class AnswerRepository
         int currentTotal = known.Values.Sum();
         int needed = requiredTotal - currentTotal;
 
+        Console.WriteLine($"[DEBUG] Current Total from known stations: {currentTotal}");
+        Console.WriteLine($"[DEBUG] Required Total for {target.ToUpper()}: {requiredTotal}");
+        Console.WriteLine($"[DEBUG] Needed Points for '{unknown}': {needed}");
+
         // Cap needed to max 25 and min required
-        if (needed > 25)
+        int stationMax = unknown switch
+        {
+            "runtime" => 50,
+            _ => 25
+        };
+
+        if (needed > stationMax)
         {
             return $"❌ Based on your current scores, reaching {target.ToUpper()} is not possible.\n" +
-                   $"You need {needed} points in '{unknown}', but max per station is 25.";
+                $"You need {needed} points in '{unknown}', but max possible is {stationMax}.";
         }
 
         if (needed < minPerStation) needed = minPerStation;
 
         string suggestion = unknown switch
         {
-            "push-up" => $"🏋️ You need at least {needed} points for Push-Ups → estimated {ReversePushUpScore(gender, age, needed)} reps.",
-            "sit-up" => $"🧍‍♂️ You need at least {needed} points for Sit-Ups → estimated {ReverseSitUpScore(gender, age, needed)} reps.",
-            "runtime" => $"🏃 You need at least {needed} points for the 2.4km run → approximately {ReverseRunScore(gender, age, needed)} minutes.",
+            "push-up" => $"🏋️ You need at least {needed} points for Push-Ups → estimated {ReversePushUpScore(gender, ageGroup, needed)} reps.",
+            "sit-up" => $"🧍‍♂️ You need at least {needed} points for Sit-Ups → estimated {ReverseSitUpScore(gender, ageGroup, needed)} reps.",
+            "runtime" => ageGroup >= 1 && ageGroup <= 9
+                ? $"🏃 You need at least {needed} points for the 2.4km run → approximately {ReverseRunScore(gender, ageGroup, needed)} minutes."
+                : "⚠️ Unable to estimate runtime due to invalid age group.",
             _ => "⚠️ Unknown station type."
         };
 
         return $"🎯 To reach {target.ToUpper()}:\n" +
                $"• Known: {string.Join(", ", known.Select(kv => $"{kv.Key}: {kv.Value} pts"))}\n" +
-               $"• Required in '{unknown}': {needed} pts\n\n{suggestion}";
+               $"• Required in {unknown}: {needed} pts\n\n{suggestion}";
     }
 
     public static int ReversePushUpScore(string gender, int ageGroup, int targetScore)
     {
+        Console.WriteLine($"[DEBUG] ReverseSitUpScore called with gender={gender}, ageGroup={ageGroup}, targetScore={targetScore}");
         for (int reps = 0; reps <= 80; reps++)
         {
             if (IPPTScorer.GetPushUpScore(gender, reps, ageGroup) >= targetScore)
@@ -215,6 +228,8 @@ public class AnswerRepository
 
     public static int ReverseSitUpScore(string gender, int ageGroup, int targetScore)
     {
+        Console.WriteLine($"[DEBUG] ReverseSitUpScore called with gender={gender}, ageGroup={ageGroup}, targetScore={targetScore}");
+
         for (int reps = 0; reps <= 80; reps++)
         {
             if (IPPTScorer.GetSitUpScore(gender, reps, ageGroup) >= targetScore)
@@ -225,13 +240,25 @@ public class AnswerRepository
 
     public static string ReverseRunScore(string gender, int ageGroup, int targetScore)
     {
-        for (int min = 6; min <= 20; min++)
+        Console.WriteLine($"[DEBUG] ReverseSitUpScore called with gender={gender}, ageGroup={ageGroup}, targetScore={targetScore}");
+
+        if (ageGroup < 1 || ageGroup > 9)
+            throw new ArgumentOutOfRangeException(nameof(ageGroup), "Age group must be between 1 and 9.");
+
+        // Reverse iteration: slowest to fastest
+        for (int sec = 1050; sec >= 360; sec--)
         {
-            for (int sec = 0; sec < 60; sec++)
+            var ts = TimeSpan.FromSeconds(sec);
+            string runtime = $"{ts.Minutes}:{ts.Seconds:D2}";
+            try
             {
-                string runtime = $"{min}:{sec:D2}";
-                if (IPPTScorer.GetRunScore(gender, runtime, ageGroup) >= targetScore)
+                int score = IPPTScorer.GetRunScore(gender, runtime, ageGroup);
+                if (score == targetScore)
                     return runtime;
+            }
+            catch
+            {
+                continue;
             }
         }
         return "unreachable";

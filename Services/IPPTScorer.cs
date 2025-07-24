@@ -1,5 +1,16 @@
 public static class IPPTScorer
 {
+    public static int TargetToScore(string target)
+    {
+        return target.ToLower() switch
+        {
+            "pass" => 62,
+            "silver" => 75,
+            "gold" => 85,
+            _ => throw new ArgumentException("Invalid target.", nameof(target)),
+        };
+    }
+
     private static readonly int[,] MaleSitUpScoreTable = new int[53, 9]
     {
         {0,0,0,0,0,0,0,0,1},  // 7
@@ -268,11 +279,17 @@ public static class IPPTScorer
             throw new ArgumentOutOfRangeException(nameof(ageGroup), "Age group must be 1-9.");
         int ageIndex = ageGroup - 1;
 
-        if (!runTime.Contains("."))
-            throw new ArgumentException("Run time must be in minutes.seconds format, e.g., 10.30");
-        var parts = runTime.Split('.');
+        // if (!runTime.Contains("."))
+        //     throw new ArgumentException("Run time must be in minutes.seconds format, e.g., 10.30");
+        // var parts = runTime.Split('.');
+        // if (parts.Length != 2 || !int.TryParse(parts[0], out int minutes) || !int.TryParse(parts[1], out int seconds))
+        //     throw new ArgumentException("Invalid run time format. Please enter as minutes.seconds, e.g., 10.30");
+
+        char separator = runTime.Contains(':') ? ':' : '.';
+        var parts = runTime.Split(separator);
         if (parts.Length != 2 || !int.TryParse(parts[0], out int minutes) || !int.TryParse(parts[1], out int seconds))
-            throw new ArgumentException("Invalid run time format. Please enter as minutes.seconds, e.g., 10.30");
+            throw new ArgumentException("Invalid run time format. Please enter as mm:ss, e.g., 10:30");
+
 
         int totalSeconds = minutes * 60 + seconds;
 
