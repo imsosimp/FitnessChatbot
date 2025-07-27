@@ -41,13 +41,13 @@ public class ChatController : ControllerBase
     [HttpPost]
     public IActionResult Post([FromBody] ChatRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request?.Message)) 
+        if (string.IsNullOrWhiteSpace(request?.Message))
             return Respond("Sorry, I couldn't understand your question.");
 
         string message = request.Message.ToLower().Trim();
         Console.WriteLine("[BOT] User Message: " + message);
 
-        if (string.IsNullOrWhiteSpace(request?.Message)) 
+        if (string.IsNullOrWhiteSpace(request?.Message))
             return Respond("Sorry, I couldn't understand your question.");
 
         var intent = _nlu.Classify(message);
@@ -70,14 +70,14 @@ public class ChatController : ControllerBase
         if (intent.QuestionType == "ippt_check" || _nlu.IsIPPTCheckRequest(message))
             return StartIpptFlow();
 
-        if (_nlu.IsReverseIpptQuery(message) || 
-            (!string.IsNullOrEmpty(intent.Level) && 
+        if (_nlu.IsReverseIpptQuery(message) ||
+            (!string.IsNullOrEmpty(intent.Level) &&
             Regex.IsMatch(intent.Level, @"\b(pass|silver|gold)\b", RegexOptions.IgnoreCase)))
         {
             Console.WriteLine("[BOT] Handling Reverse IPPT");
             return StartReverseFlow(message);
         }
-        
+
         if (IsWhatOrWhyIppt(message)) return HandleWhatWhyIppt(message);
 
         if (IsRequestingIpptTips(message))
@@ -86,13 +86,22 @@ public class ChatController : ControllerBase
             return HandleIpptTips();
         }
 
-        if (intent.QuestionType == "tips")
-            return HandleTipsFlow(intent, message);    
+        if (intent.QuestionType == "tips" || HasImproveIntent(message) || message.Contains("tip"))
+        {
+            Console.WriteLine("[BOT] Handling IPPT Tips");
+            return HandleTipsFlow(intent, message);
+        }
 
         if (!string.IsNullOrEmpty(intent.QuestionType))
-            return HandleGenericQuestion(intent, message);
+                return HandleGenericQuestion(intent, message);
 
-        return HandleTrainingPlan(intent, message);
+        if (_nlu.HasTrainingIntent(message) || !string.IsNullOrEmpty(intent.Field))
+            return HandleTrainingPlan(intent, message);
+
+        return Ok(new ChatResponse
+        {
+            Response = "Sorry, I couldn't understand your question."
+        });
     }
 
     private bool IsGoodbye(string msg) =>
@@ -275,7 +284,7 @@ public class ChatController : ControllerBase
         // Prompt for level if field is set but level is missing
         if (!string.IsNullOrEmpty(prevField) && string.IsNullOrEmpty(prevLevel))
         {
-            if (HasImproveIntent(message))
+            if (HasImproveIntent(message) || prevField == "sit-up" || prevField == "push-up" || prevField == "running") 
             {
                 string levelPrompt = prevField switch
                 {
@@ -1031,6 +1040,7 @@ public class ChatController : ControllerBase
         );
 
         ClearIpptSession();
+        ClearReverseFlowSession();
         return Ok(new ChatResponse { Response = result });
     }
 
@@ -1075,6 +1085,7 @@ public class ChatController : ControllerBase
 
     private void ClearReverseFlowSession()
     {
+        HttpContext.Session.Remove(SessionIpptReverseFlowKey);
         var session = HttpContext.Session;
         session.Remove(SessionGenderKey);
         session.Remove(SessionAgeKey);

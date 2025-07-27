@@ -94,14 +94,26 @@ public class NLUProcessor
             MiscIntent = DetectMiscIntent(message)
         };
 
-        // IPPT Check detection (based on stricter match)
+        // IPPT Check detection
         if (Regex.IsMatch(message, @"\bippt\b") &&
             Regex.IsMatch(message, @"\b(check|score|result|performance)\b"))
         {
             Console.WriteLine("[NLU] Intent matched for IPPT_CHECK with keywords: ippt + check/score/result/performance");
-            result.QuestionType = "ippt_check"; // override if needed
+            result.QuestionType = "ippt_check";
         }
 
+        if (TipsOrImproveRegex.IsMatch(message) || HasTrainingIntent(message))
+        {
+            result.QuestionType = "tips";
+        }
+
+        // Make sure body part gets mapped to an exercise to avoid controller bounces
+        if (result.Field == "bodypart")
+        {
+            var mapped = MapBodypartToExercise(message);
+            if (!string.IsNullOrEmpty(mapped))
+                result.Field = mapped;
+        }
         return result;
     }
 
@@ -221,6 +233,13 @@ public class NLUProcessor
             }
         }
 
+        var mapped = MapBodypartToExercise(message);
+        if (!string.IsNullOrEmpty(mapped))
+        {
+            Console.WriteLine($"[NLU] Mapped bodypart '{message}' → '{mapped}'");
+            return mapped;
+        }
+
         // Fallback regex for push-up variations
         if (Regex.IsMatch(message, @"\bpush[\s\-]?ups?\b", RegexOptions.IgnoreCase))
         {
@@ -260,16 +279,16 @@ public class NLUProcessor
 
     public string DetectQuestionIntent(string message)
     {
-        if (message.Contains("muscle") || message.Contains("body part") || message.Contains("muscle group"))
-        {
+        if (TipsOrImproveRegex.IsMatch(message))
+            return "tips";
+
+        if (message.Contains("muscle") || message.Contains("body part") || message.Contains("muscle group"))    
             return "muscle";
-        }
+        
         foreach (var pair in QuestionIntents)
         {
-            if (message.Contains(pair.Key))
-            {
-                return pair.Value;
-            }
+            if (message.Contains(pair.Key))            
+                return pair.Value;            
         }
         return null;
     }
@@ -296,7 +315,18 @@ public class NLUProcessor
             return "running";
 
         return null;
-    }    
+    }
+    public bool HasTrainingIntent(string message)
+    {
+        return Regex.IsMatch(message, @"\b(train|improve|increase|boost|better|enhance|progress|workout|plan|routine|program)\b",
+                            RegexOptions.IgnoreCase)
+            || !string.IsNullOrEmpty(DetectField(message));
+    }
+
+    private static readonly Regex TipsOrImproveRegex = new(
+    @"\b(tip|tips|advice|how to (?:improve|increase|boost)|improve|increase|boost|progress|better|enhance)\b",
+    RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    
 }
 
 public class IntentResult

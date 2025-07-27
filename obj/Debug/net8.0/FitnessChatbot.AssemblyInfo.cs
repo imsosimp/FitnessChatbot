@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("FitnessChatbot")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f86b08ce13636a400aaa3d9581fcd2570a0ce4f6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ce070515f8aecafcfcba1e9adb8fd117abeb2a09")]
 [assembly: System.Reflection.AssemblyProductAttribute("FitnessChatbot")]
 [assembly: System.Reflection.AssemblyTitleAttribute("FitnessChatbot")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

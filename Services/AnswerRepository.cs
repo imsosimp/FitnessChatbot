@@ -14,7 +14,7 @@ public class AnswerRepository
         // PUSH-UP (shared by chest & triceps)
         { ("push-up", "beginner"), @"Push-Up Training Program – Beginner (0-20 reps) 1. Wall Push-Ups: 3x10-12. 2. Incline Push-Ups: 3x8-10. 3. Negative Push-Ups: 2-3x5 (slow descent). 4. Knee Push-Ups: 3x6-8. 3-4 times/week."+"\n\nProgress by increasing reps or moving to harder variations." },
         { ("push-up", "amateur"), @"Push-Up Training Program – Amateur (20-40 reps) 1. Standard Push-Ups: 3-4 sets of max reps (stop 1-2 reps before failure). 2. Wide Push-Ups (chest): 3x10-12. 3. Diamond Push-Ups (triceps): 3x8-10."+"\n\nProgress every 1-2 weeks." },
-        { ("push-up", "advanced"), @"Push-Up Training Program – Advanced (40+ reps) 1. Incline Clapping Push-Ups: 2-3x5-8. 2. Archer or One-Arm Push-Ups for challenge."+"\n\n3-5 times/week focusing on form and control." },
+        { ("push-up", "advanced"), @"Push-Up Training Program – Advanced (40+ reps) 1. Incline Clapping Push-Ups: 2-3x5-8. 2. Archer or One-Arm Push-Ups for challenge. 3. Staggered Arm Push-Ups"+"\n\n3-5 times/week focusing on form and control." },
 
         // SIT-UP (shared by abs)
         { ("sit-up", "beginner"), @"Sit-Up Training Program – Beginner (0-15 reps) 1. Assisted Sit-Ups: 3x8-10. 2. Crunches: 3x12-15. 3. Negative Sit-Ups: 2-3x6-8 (slow descent). 4. Plank Holds: 2-3x20-30s. 3-4 times/week."+"\n\nBuild core strength before progressing." },
@@ -162,8 +162,8 @@ public class AnswerRepository
         var unknown = stationScores.FirstOrDefault(kv => !kv.Value.HasValue).Key;
 
         if (unknown == null)
-            return " All station scores are already provided. No need for reverse calculation.";
-
+            return " All station scores are already provided. No need for reverse calculation.";        
+            
         int requiredTotal = target.ToLower() switch
         {
             "gold" => 85,
@@ -212,7 +212,7 @@ public class AnswerRepository
 
         return $"🎯 To reach {target.ToUpper()}:\n" +
                $"• Known: {string.Join(", ", known.Select(kv => $"{kv.Key}: {kv.Value} pts"))}\n" +
-               $"• Required in {unknown}: {needed} pts\n\n{suggestion}";
+               $"• Required in {unknown}: {needed} pts\n\n{suggestion}";            
     }
 
     public static int ReversePushUpScore(string gender, int ageGroup, int targetScore)
